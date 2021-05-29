@@ -7,6 +7,7 @@
 #include <fstream>
 #include <stdio.h>
 #include <string.h>
+#include <math.h> 
 #include <glad/glad.h>
 
 #include "GLSL.h"
@@ -139,27 +140,52 @@ public:
 		}
         if (key == GLFW_KEY_W && action == GLFW_PRESS){
 			view = g_lookAt - g_eye;
-            g_eye = g_eye + (speed*view);
-            g_lookAt = g_lookAt + (speed*view);
+            if (!detectCollision(g_eye + (speed*view))) {
+                g_eye = g_eye + (speed*view);
+                g_lookAt = g_lookAt + (speed*view);
+            }
 		}
         if (key == GLFW_KEY_A && action == GLFW_PRESS){
             view = g_lookAt - g_eye;
             strafe = cross(view, vec3(0, 1, 0));
-			g_eye = g_eye - (speed*strafe);
-            g_lookAt = g_lookAt - (speed*strafe);
+            if (!detectCollision(g_eye - (speed*strafe))) {
+                g_eye = g_eye - (speed*strafe);
+                g_lookAt = g_lookAt - (speed*strafe);
+            }
 		}
         if (key == GLFW_KEY_S && action == GLFW_PRESS){
 			view = g_lookAt - g_eye;
-            g_eye = g_eye - (speed*view);
-            g_lookAt = g_lookAt - (speed*view);
+            if (!detectCollision(g_eye - (speed*view))) {
+                g_eye = g_eye - (speed*view);
+                g_lookAt = g_lookAt - (speed*view);
+            }
 		}
         if (key == GLFW_KEY_D && action == GLFW_PRESS){
             view = g_lookAt - g_eye;
             strafe = cross(view, vec3(0, 1, 0));
-			g_eye = g_eye + (speed*strafe);
-            g_lookAt = g_lookAt + (speed*strafe);
+            if (!detectCollision(g_eye + (speed*strafe))) {
+                g_eye = g_eye + (speed*strafe);
+                g_lookAt = g_lookAt + (speed*strafe);
+            }
 		}
 	}
+
+    vec2 findMySpace(vec3 myPos) { // x,z to i,j
+        float x = round(myPos.x);
+        float z = round(myPos.z);
+
+        float i = (0.5*z) + 15;
+        float j = (0.5*x) + 15;
+        return vec2(i,j);
+    }
+
+    bool detectCollision(vec3 myPos) {
+        vec2 occPos = findMySpace(myPos);
+        if (occupancy[(int)occPos.x][(int)occPos.y] != 1) // If not a wall
+            return false;
+        else
+            return true;
+    }
 
 	void mouseCallback(GLFWwindow *window, int button, int action, int mods)
 	{
