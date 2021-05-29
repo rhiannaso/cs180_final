@@ -171,8 +171,8 @@ public:
 	}
 
     vec2 findMySpace(vec3 myPos) { // x,z to i,j
-        float x = round(myPos.x);
-        float z = round(myPos.z);
+        float x = round(myPos.x/2) * 2; // round to nearest even (all spaces centered on even #s)
+        float z = round(myPos.z/2) * 2;
 
         float i = (0.5*z) + 15;
         float j = (0.5*x) + 15;
@@ -181,6 +181,9 @@ public:
 
     bool detectCollision(vec3 myPos) {
         vec2 occPos = findMySpace(myPos);
+        // cout << occPos.x << " " << occPos.y << endl;
+        // cout << (int)round(occPos.x) << " " << (int)round(occPos.y) << endl;
+        // cout << "---------" << endl;
         if (occupancy[(int)occPos.x][(int)occPos.y] != 1) // If not a wall
             return false;
         else
