@@ -19,12 +19,14 @@ class Shape
 public:
 
 	void createShape(tinyobj::shape_t & shape);
-	void init();
+	void init(std::string type="");
 	void measure();
     void storeNormal(glm::vec3 n, int index);
     void computeNormals();
-	void draw(const std::shared_ptr<Program> prog) const;
+	void draw(const std::shared_ptr<Program> prog, std::string type="") const;
     std::vector<int> getMat() { return matBuf; }
+    void setPos(std::vector<float> pos) { positions = pos; }
+    // unsigned int getEleSize() { return eleBuf.size(); }
 
 	glm::vec3 min = glm::vec3(0);
 	glm::vec3 max = glm::vec3(0);
@@ -35,13 +37,14 @@ private:
 	std::vector<float> posBuf;
 	std::vector<float> norBuf;
 	std::vector<float> texBuf;
+    std::vector<float> positions;
     std::vector<int> matBuf;
 	unsigned int eleBufID = 0;
 	unsigned int posBufID = 0;
 	unsigned int norBufID = 0;
 	unsigned int texBufID = 0;
 	unsigned int vaoID = 0;
-
+    unsigned int instanceID = 0;
 };
 
 #endif // LAB471_SHAPE_H_INCLUDED

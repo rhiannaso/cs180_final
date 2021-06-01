@@ -54,12 +54,19 @@ public:
 
 	shared_ptr<Shape> cube;
 
+    shared_ptr<Shape> cubeTex;
+
     shared_ptr<Shape> roadObj;
     shared_ptr<Shape> lampMesh;
     vector<shared_ptr<Shape>> houseMesh;
     vector<shared_ptr<Shape>> treeMesh;
     vector<shared_ptr<Shape>> bigTreeMesh;
     vector<shared_ptr<Shape>> carMesh;
+    vector<shared_ptr<Shape>> dummyMesh;
+    vector<shared_ptr<Shape>> statueMesh;
+    vector<shared_ptr<Shape>> statueMesh2;
+    vector<vec3> dummyMin;
+    vector<vec3> dummyMax;
 
     vector<tinyobj::material_t> houseMat;
     vector<tinyobj::material_t> carMat;
@@ -101,17 +108,28 @@ public:
     shared_ptr<Texture> glass;
     shared_ptr<Texture> bark;
     shared_ptr<Texture> bigLeaf;
+    shared_ptr<Texture> hedge;
+    shared_ptr<Texture> dirt;
+    shared_ptr<Texture> statueTex;
+    shared_ptr<Texture> statueTex2;
 
 	//animation data
 	float lightTrans = 0;
 
     int occupancy[31][31] = {0};
+    vector<float> positions;
+    int numWalls = 0;
+    GLuint instanceVBO;
+
+    bool setLaunch = true;
 
 	//camera
 	double g_phi, g_theta;
 	vec3 view = vec3(0, 0, 1);
 	vec3 strafe = vec3(1, 0, 0);
 	vec3 g_eye = vec3(16, 0, 33);
+    // vec3 g_eye = vec3(0, 60, 10);
+    // vec3 g_lookAt = vec3(0, 0, 0);
 	vec3 g_lookAt = vec3(16, 0, 30);
     float speed = 0.3;
 
@@ -140,7 +158,7 @@ public:
 		}
         if (key == GLFW_KEY_W && action == GLFW_PRESS){
 			view = g_lookAt - g_eye;
-            if (!detectCollision(g_eye + (speed*view))) {
+            if (!detectCollision(g_eye + (speed*view)) && !detectHeight(g_eye + (speed*view))) {
                 g_eye = g_eye + (speed*view);
                 g_lookAt = g_lookAt + (speed*view);
             }
@@ -148,14 +166,14 @@ public:
         if (key == GLFW_KEY_A && action == GLFW_PRESS){
             view = g_lookAt - g_eye;
             strafe = cross(view, vec3(0, 1, 0));
-            if (!detectCollision(g_eye - (speed*strafe))) {
+            if (!detectCollision(g_eye - (speed*strafe)) && !detectHeight(g_eye - (speed*strafe))) {
                 g_eye = g_eye - (speed*strafe);
                 g_lookAt = g_lookAt - (speed*strafe);
             }
 		}
         if (key == GLFW_KEY_S && action == GLFW_PRESS){
 			view = g_lookAt - g_eye;
-            if (!detectCollision(g_eye - (speed*view))) {
+            if (!detectCollision(g_eye - (speed*view)) && !detectHeight(g_eye - (speed*view))) {
                 g_eye = g_eye - (speed*view);
                 g_lookAt = g_lookAt - (speed*view);
             }
@@ -163,7 +181,7 @@ public:
         if (key == GLFW_KEY_D && action == GLFW_PRESS){
             view = g_lookAt - g_eye;
             strafe = cross(view, vec3(0, 1, 0));
-            if (!detectCollision(g_eye + (speed*strafe))) {
+            if (!detectCollision(g_eye + (speed*strafe)) && !detectHeight(g_eye + (speed*strafe))) {
                 g_eye = g_eye + (speed*strafe);
                 g_lookAt = g_lookAt + (speed*strafe);
             }
@@ -181,13 +199,17 @@ public:
 
     bool detectCollision(vec3 myPos) {
         vec2 occPos = findMySpace(myPos);
-        // cout << occPos.x << " " << occPos.y << endl;
-        // cout << (int)round(occPos.x) << " " << (int)round(occPos.y) << endl;
-        // cout << "---------" << endl;
         if (occupancy[(int)occPos.x][(int)occPos.y] != 1) // If not a wall
             return false;
         else
             return true;
+    }
+
+    bool detectHeight(vec3 myPos) {
+        if (myPos.y > 2)
+            return true;
+        else
+            return false;
     }
 
 	void mouseCallback(GLFWwindow *window, int button, int action, int mods)
@@ -338,6 +360,30 @@ public:
   		bigLeaf->init();
   		bigLeaf->setUnit(15);
   		bigLeaf->setWrapModes(GL_CLAMP_TO_EDGE, GL_CLAMP_TO_EDGE);
+
+        hedge = make_shared<Texture>();
+  		hedge->setFilename(resourceDirectory + "/hedge.jpg");
+  		hedge->init();
+  		hedge->setUnit(16);
+  		hedge->setWrapModes(GL_CLAMP_TO_EDGE, GL_CLAMP_TO_EDGE);
+
+        dirt = make_shared<Texture>();
+  		dirt->setFilename(resourceDirectory + "/ground.jpg");
+  		dirt->init();
+  		dirt->setUnit(17);
+  		dirt->setWrapModes(GL_REPEAT, GL_REPEAT);
+
+        statueTex = make_shared<Texture>();
+  		statueTex->setFilename(resourceDirectory + "/statue/statue.jpg");
+  		statueTex->init();
+  		statueTex->setUnit(18);
+  		statueTex->setWrapModes(GL_CLAMP_TO_EDGE, GL_CLAMP_TO_EDGE);
+
+        statueTex2 = make_shared<Texture>();
+  		statueTex2->setFilename(resourceDirectory + "/statue2/mm_facade_sculpture_03_diffus.jpg");
+  		statueTex2->init();
+  		statueTex2->setUnit(19);
+  		statueTex2->setWrapModes(GL_CLAMP_TO_EDGE, GL_CLAMP_TO_EDGE);
     }
 
 	void init(const std::string& resourceDirectory)
@@ -399,8 +445,10 @@ public:
 		cubeProg->addAttribute("vertNor");
 
   		// init splines up and down
-       splinepath[0] = Spline(glm::vec3(-6,3,5), glm::vec3(-1,0,5), glm::vec3(1, 5, 5), glm::vec3(3,3,5), 5);
-       splinepath[1] = Spline(glm::vec3(3,3,5), glm::vec3(4,1,5), glm::vec3(-0.75, 0.25, 5), glm::vec3(0,0,5), 5);
+    //    splinepath[0] = Spline(glm::vec3(-6,3,5), glm::vec3(-1,0,5), glm::vec3(1, 5, 5), glm::vec3(3,3,5), 5);
+    //    splinepath[1] = Spline(glm::vec3(3,3,5), glm::vec3(4,1,5), glm::vec3(-0.75, 0.25, 5), glm::vec3(0,0,5), 5);
+        splinepath[0] = Spline(glm::vec3(-20,12,-20), glm::vec3(-10,10,-10), glm::vec3(0, 8, 0), glm::vec3(10,6,10), 5);
+        splinepath[1] = Spline(glm::vec3(10,6,10), glm::vec3(20,4,20), glm::vec3(25, 2, 30), glm::vec3(16,0,33), 5);
     
 	}
 
@@ -447,28 +495,87 @@ public:
 			sphere->init();
 		}
 
-		// Initialize bunny mesh.
-		vector<tinyobj::shape_t> TOshapesB;
- 		vector<tinyobj::material_t> objMaterialsB;
-		//load in the mesh and make the shape(s)
- 		rc = tinyobj::LoadObj(TOshapesB, objMaterialsB, errStr, (resourceDirectory + "/dog.obj").c_str());
+		rc = tinyobj::LoadObj(TOshapes, objMaterials, errStr, (resourceDirectory + "/statue/Venus_de_Milo.obj").c_str());
 		if (!rc) {
 			cerr << errStr << endl;
-		} else {	
-			theDog = make_shared<Shape>();
-			theDog->createShape(TOshapesB[0]);
-			theDog->measure();
-			theDog->init();
+		} else {
+			for (int i = 0; i < TOshapes.size(); i++) {
+                shared_ptr<Shape> tmp = make_shared<Shape>();
+                tmp->createShape(TOshapes[i]);
+                tmp->measure();
+                tmp->init();
+
+                statueMesh.push_back(tmp);
+            }
 		}
 
-        rc = tinyobj::LoadObj(TOshapesB, objMaterialsB, errStr, (resourceDirectory + "/cube.obj").c_str());
+        rc = tinyobj::LoadObj(TOshapes, objMaterials, errStr, (resourceDirectory + "/statue2/mm_artdeco_sculpture_01.obj").c_str());
+		if (!rc) {
+			cerr << errStr << endl;
+		} else {
+			for (int i = 0; i < TOshapes.size(); i++) {
+                shared_ptr<Shape> tmp = make_shared<Shape>();
+                tmp->createShape(TOshapes[i]);
+                tmp->measure();
+                tmp->init();
+
+                statueMesh2.push_back(tmp);
+            }
+		}
+
+        rc = tinyobj::LoadObj(TOshapes, objMaterials, errStr, (resourceDirectory + "/cube_tex.obj").c_str());
+		if (!rc) {
+			cerr << errStr << endl;
+		} else {
+			cubeTex = make_shared<Shape>();
+			cubeTex->createShape(TOshapes[0]);
+			cubeTex->measure();
+			cubeTex->init();
+		}
+
+        rc = tinyobj::LoadObj(TOshapes, objMaterials, errStr, (resourceDirectory + "/cube.obj").c_str());
 		if (!rc) {
 			cerr << errStr << endl;
 		} else {
 			cube = make_shared<Shape>();
-			cube->createShape(TOshapesB[0]);
+			cube->createShape(TOshapes[0]);
 			cube->measure();
+
+            int index = 0;
+
+            for (int i=0; i < 31; i++) {
+                for (int j=0; j < 31; j++) {
+                    if (occupancy[i][j] == 1) {
+                        vec3 tmp = mapSpaces(i, j);
+                        positions.push_back(tmp.x);
+                        positions.push_back(tmp.y);
+                        positions.push_back(tmp.z);
+                    }
+                }
+            }
+            cube->setPos(positions);
+
 			cube->init();
+		}
+
+        rc = tinyobj::LoadObj(TOshapes, objMaterials, errStr, (resourceDirectory + "/dummy.obj").c_str());
+        if (!rc) {
+			cerr << errStr << endl;
+		} else {
+            for (int i = 0; i < TOshapes.size(); i++) {
+                shared_ptr<Shape> tmp = make_shared<Shape>();
+                tmp->createShape(TOshapes[i]);
+                tmp->measure();
+                tmp->init();
+
+                dummyMin.push_back(tmp->min);
+                dummyMax.push_back(tmp->max);
+                dummyMesh.push_back(tmp);
+            }
+            // for (int i=0; i < dummyMin.size(); i++) {
+            //     cout << i << " min: " << dummyMin[i].x << " " << dummyMin[i].y << " " << dummyMin[i].z << endl;
+            //     cout << i << " max: " << dummyMax[i].x << " " << dummyMax[i].y << " " << dummyMax[i].z << endl;
+            // }
 		}
 
         rc = tinyobj::LoadObj(TOshapes, carMat, errStr, (resourceDirectory + "/car/car.obj").c_str(), (resourceDirectory + "/car/").c_str());
@@ -548,7 +655,7 @@ public:
 		}
 
 
-        cubeMapTexture = createSky("../resources/cloudy/", faces);
+        cubeMapTexture = createSky("../resources/sky/", faces);
 
 		//code to load in the ground plane (CPU defined data passed to GPU)
 		initGround();
@@ -611,7 +718,7 @@ public:
      void drawGround(shared_ptr<Program> curS) {
      	curS->bind();
      	glBindVertexArray(GroundVertexArrayID);
-     	texture0->bind(curS->getUniform("Texture0"));
+     	dirt->bind(curS->getUniform("Texture0"));
 		//draw the ground plane 
   		SetModel(vec3(0, -1, 0), 0, 0, 1, curS);
   		glEnableVertexAttribArray(0);
@@ -745,8 +852,6 @@ public:
     }
 
     vec3 mapSpaces(int i, int j) {
-        // float x = (4*j) - 60;
-        // float z = (4*i) - 60;
         float x = (2*j) - 30;
         float z = (2*i) - 30;
         return vec3(x, -1.25, z);
@@ -770,20 +875,18 @@ public:
 
     void drawTree(shared_ptr<MatrixStack> Model, shared_ptr<Program> prog, float xPos, float zPos) {
         Model->pushMatrix();
-            Model->pushMatrix();
-                Model->translate(vec3(xPos, -1.25, zPos));
-                Model->scale(vec3(0.09, 0.09, 0.09));
+            Model->translate(vec3(xPos, -1.25, zPos));
+            Model->scale(vec3(0.09, 0.09, 0.09));
 
-                setModel(prog, Model);
-                for (int i=0; i < treeMesh.size(); i++) {
-                    if (i == 0) {
-                        lightWood->bind(prog->getUniform("Texture0"));
-                    } else {
-                        leaf->bind(prog->getUniform("Texture0"));
-                    }
-                    treeMesh[i]->draw(prog);
+            setModel(prog, Model);
+            for (int i=0; i < treeMesh.size(); i++) {
+                if (i == 0) {
+                    lightWood->bind(prog->getUniform("Texture0"));
+                } else {
+                    leaf->bind(prog->getUniform("Texture0"));
                 }
-            Model->popMatrix();
+                treeMesh[i]->draw(prog);
+            }
         Model->popMatrix();
     }
 
@@ -813,6 +916,173 @@ public:
                 Model->popMatrix();
             }
         Model->popMatrix();
+    }
+
+    vec3 findCenter(int i) {
+        float x = (dummyMesh[i]->max.x - dummyMesh[i]->min.x)/2;
+        float y = (dummyMesh[i]->max.y - dummyMesh[i]->min.y)/2;
+        float z = (dummyMesh[i]->max.z - dummyMesh[i]->min.z)/2;
+        return vec3(x, y, z);
+    }
+
+    void drawDummy(shared_ptr<MatrixStack> Model, shared_ptr<Program> prog) {
+        vec3 tmp;
+        Model->pushMatrix();
+            Model->translate(vec3(16, -1.25, 30));
+            Model->scale(vec3(0.01, 0.01, 0.01));
+            //Model->rotate(-PI/2.0, vec3(0, 1, 0));
+            Model->rotate(-PI/2.0, vec3(1, 0, 0));
+            setModel(prog, Model);
+            for (int i=12; i <= 14; i++) {
+                dummyMesh[i]->draw(prog);
+            }
+            dummyMesh[27]->draw(prog); // neck
+            dummyMesh[28]->draw(prog); // head
+
+            // LEFT ARM
+            //  KEYFRAMES X-AXIS: -PI/2.4 (arm to side),
+            //  KEYFRAMES Z-AXIS: none, PI/8.0, none, -PI/8.0
+            Model->pushMatrix();
+                Model->translate(vec3(1.0f*dummyMesh[21]->min.x, 1.0f*dummyMesh[21]->min.y, 1.0f*dummyMesh[21]->max.z));
+                Model->rotate(-PI/2.4, vec3(1, 0, 0));
+                Model->rotate(-PI/8.0, vec3(0, 0, 1));
+                Model->translate(vec3(-1.0f*dummyMesh[21]->min.x, -1.0f*dummyMesh[21]->min.y, -1.0f*dummyMesh[21]->max.z));
+                setModel(prog, Model);
+                for (int i=21; i <=26; i++) {
+                    dummyMesh[i]->draw(prog);
+                }
+            Model->popMatrix();
+            // RIGHT ARM
+            //  KEYFRAMES X-AXIS: PI/2.4 (arm to side)
+            //  KEYFRAMES Z-AXIS: none, PI/8.0, none, -PI/8.0
+            Model->pushMatrix();
+                tmp = findCenter(15);
+                Model->translate(vec3(1.0f*dummyMesh[15]->max.x, 1.0f*dummyMesh[15]->max.y, 1.0f*dummyMesh[15]->max.z));
+                Model->rotate(PI/2.4, vec3(1, 0, 0));
+                Model->rotate(-PI/8.0, vec3(0, 0, 1));
+                Model->translate(vec3(-1.0f*dummyMesh[15]->max.x, -1.0f*dummyMesh[15]->max.y, -1.0f*dummyMesh[15]->max.z));
+                setModel(prog, Model);
+                for (int i=15; i <=20; i++) {
+                    dummyMesh[i]->draw(prog);
+                }
+            Model->popMatrix();
+            // LEFT LEG
+            //  KEYFRAMES: PI/6.0 (leg backward), none (but knee bent), -PI/10.0, -PI/6.0, none,
+            Model->pushMatrix();
+                Model->translate(vec3(1.0f*dummyMesh[11]->min.x, 1.0f*dummyMesh[11]->min.y, 1.0f*dummyMesh[11]->max.z));
+                //Model->rotate(-PI/6.0, vec3(0, 1, 0));
+                Model->translate(vec3(-1.0f*dummyMesh[11]->min.x, -1.0f*dummyMesh[11]->min.y, -1.0f*dummyMesh[11]->max.z));
+                setModel(prog, Model);
+                dummyMesh[11]->draw(prog); // pelvis
+                dummyMesh[10]->draw(prog); // upper leg
+
+                // KEYFRAMES: none, PI/3.0, PI/4.0, none, none, 
+                Model->translate(vec3(1.0f*dummyMesh[9]->max.x, 1.0f*dummyMesh[9]->min.y, 1.0f*dummyMesh[9]->max.z));
+                //Model->rotate(PI/3.0, vec3(0, 1, 0));
+                Model->translate(vec3(-1.0f*dummyMesh[9]->max.x, -1.0f*dummyMesh[9]->min.y, -1.0f*dummyMesh[9]->max.z));
+                setModel(prog, Model);
+                for (int i=6; i <=9; i++) {
+                    dummyMesh[i]->draw(prog);
+                }
+            Model->popMatrix();
+            // RIGHT LEG
+            //  KEYFRAMES: -PI/6.0 (leg forward), none, none, PI/6.0, none (but knee bent)
+            Model->pushMatrix();
+                tmp = findCenter(5);
+                Model->translate(vec3(1.0f*dummyMesh[5]->max.x, 1.0f*dummyMesh[5]->max.y, 1.0f*dummyMesh[5]->max.z));
+                //Model->rotate(PI/6.0, vec3(0, 1, 0));
+                Model->translate(vec3(-1.0f*dummyMesh[5]->max.x, -1.0f*dummyMesh[5]->max.y, -1.0f*dummyMesh[5]->max.z));
+                setModel(prog, Model);
+                dummyMesh[5]->draw(prog); // pelvis
+                dummyMesh[4]->draw(prog); // upper leg
+
+                // KEYFRAMES: none, none, none, none, PI/3.0
+                Model->translate(vec3(1.0f*dummyMesh[9]->max.x, 1.0f*dummyMesh[9]->min.y, 1.0f*dummyMesh[9]->max.z));
+                Model->rotate(PI/3.0, vec3(0, 1, 0));
+                Model->translate(vec3(-1.0f*dummyMesh[9]->max.x, -1.0f*dummyMesh[9]->min.y, -1.0f*dummyMesh[9]->max.z));
+                setModel(prog, Model);
+                for (int i=0; i <=3; i++) {
+                    dummyMesh[i]->draw(prog);
+                }
+            Model->popMatrix();
+        Model->popMatrix();
+        // vec3 tmp;
+        // Model->pushMatrix();
+        //     Model->loadIdentity();
+        //     Model->translate(vec3(16, -1.25, 30));
+        //     Model->rotate(-1.5708, vec3(1, 0, 0));
+        //     Model->rotate(-1.5708, vec3(0, 0, 1));
+        //     // HIPS
+        //     Model->pushMatrix();
+        //         Model->scale(vec3(0.01, 0.01, 0.01));
+        //         setModel(prog, Model);
+        //         dummyMesh[12]->draw(prog); // hips
+        //     Model->popMatrix();
+        //     // UPPER BODY
+        //     Model->pushMatrix();
+        //         Model->scale(vec3(0.01, 0.01, 0.01));
+        //         setModel(prog, Model);
+        //         dummyMesh[28]->draw(prog); // head
+        //         dummyMesh[27]->draw(prog); // neck
+        //         dummyMesh[14]->draw(prog); // torso
+        //         dummyMesh[13]->draw(prog); // belly
+        //     Model->popMatrix();
+        //     // LEFT ARM
+        //     Model->pushMatrix();
+        //         //Model->rotate(-1.5708, vec3(1, 0, 0));
+        //         //Model->rotate(-1.5708, vec3(0, 0, 1));
+        //         Model->pushMatrix();
+        //             tmp = findCenter(16);
+        //             Model->translate(vec3(-tmp.x, -tmp.y, -tmp.z));
+        //             // Model->rotate(-1.5708, vec3(1, 0, 0));
+        //             // Model->translate(vec3((tmp.x), (tmp.y), (tmp.z)));
+        //             // dummyMesh[20]->draw(prog); // hand
+        //             // dummyMesh[19]->draw(prog); // wrist
+        //             // dummyMesh[18]->draw(prog); // forearm
+        //             // dummyMesh[17]->draw(prog); // elbow
+        //             Model->scale(vec3(0.01, 0.01, 0.01));
+        //             setModel(prog, Model);
+        //             dummyMesh[16]->draw(prog); // bicep
+        //         Model->popMatrix();
+
+        //         Model->scale(vec3(0.01, 0.01, 0.01));
+        //         setModel(prog, Model);
+        //         dummyMesh[15]->draw(prog); // shoulder
+        //     Model->popMatrix();
+        //     // RIGHT ARM
+        //     Model->pushMatrix();
+        //         Model->scale(vec3(0.01, 0.01, 0.01));
+        //         setModel(prog, Model);
+        //         dummyMesh[26]->draw(prog); // hand
+        //         dummyMesh[25]->draw(prog); // wrist
+        //         dummyMesh[24]->draw(prog); // forearm
+        //         dummyMesh[23]->draw(prog); // elbow
+        //         dummyMesh[22]->draw(prog); // bicep
+        //         dummyMesh[21]->draw(prog); // shoulder
+        //     Model->popMatrix();
+        //     // LEFT LEG
+        //     Model->pushMatrix();
+        //         Model->scale(vec3(0.01, 0.01, 0.01));
+        //         setModel(prog, Model);
+        //         dummyMesh[6]->draw(prog); // foot
+        //         dummyMesh[7]->draw(prog); // ankle
+        //         dummyMesh[8]->draw(prog); // lower leg
+        //         dummyMesh[9]->draw(prog); // knee
+        //         dummyMesh[10]->draw(prog); // upper leg
+        //         dummyMesh[11]->draw(prog); // pelvis
+        //     Model->popMatrix();
+        //     // RIGHT LEG
+        //     Model->pushMatrix();
+        //         Model->scale(vec3(0.01, 0.01, 0.01));
+        //         setModel(prog, Model);
+        //         dummyMesh[0]->draw(prog); // foot
+        //         dummyMesh[1]->draw(prog); // ankle
+        //         dummyMesh[2]->draw(prog); // lower leg
+        //         dummyMesh[3]->draw(prog); // knee
+        //         dummyMesh[4]->draw(prog); // upper leg
+        //         dummyMesh[5]->draw(prog); // pelvis
+        //     Model->popMatrix();
+        // Model->popMatrix();
     }
 
     void drawCar(shared_ptr<MatrixStack> Model, shared_ptr<Program> prog) {
@@ -851,7 +1121,7 @@ public:
    	void updateUsingCameraPath(float frametime)  {
 
    	  if (goCamera) {
-        g_lookAt = vec3(0, 0.5, -4);
+        g_lookAt = vec3(16, 0, 30);
         if(!splinepath[0].isDone()){
        		splinepath[0].update(frametime);
             g_eye = splinepath[0].getPosition();
@@ -871,6 +1141,7 @@ public:
             while (getline(myfile, slot)) {
                 for (int j=0; j < slot.length(); j++) {
                     if (slot[j] == 'x') {
+                        numWalls++;
                         occupancy[i][j] = 1;
                     } else {
                         occupancy[i][j] = 0;
@@ -881,6 +1152,19 @@ public:
             myfile.close();
         } else {
             cout << "Unable to open file" << endl;
+        }
+    }
+
+    void launchOverview(float frametime) {
+        splinepath[0] = Spline(glm::vec3(-20,12,-20), glm::vec3(-10,10,-10), glm::vec3(0, 8, 0), glm::vec3(10,6,10), 5);
+        splinepath[1] = Spline(glm::vec3(10,6,10), glm::vec3(20,4,20), glm::vec3(25, 2, 30), glm::vec3(16,0,33), 5);
+        g_lookAt = vec3(16, 0, 30);
+        if(!splinepath[0].isDone()){
+       		splinepath[0].update(frametime);
+            g_eye = splinepath[0].getPosition();
+        } else {
+            splinepath[1].update(frametime);
+            g_eye = splinepath[1].getPosition();
         }
     }
 
@@ -902,6 +1186,10 @@ public:
 
 		//update the camera position
 		updateUsingCameraPath(frametime);
+        // if (setLaunch) {
+        //     launchOverview(frametime);
+        //     setLaunch = false;
+        // }
 
 		// Apply perspective projection.
 		Projection->pushMatrix();
@@ -911,14 +1199,47 @@ public:
 		texProg->bind();
 		glUniformMatrix4fv(texProg->getUniform("P"), 1, GL_FALSE, value_ptr(Projection->topMatrix()));
 		SetView(texProg);
-		glUniform3f(texProg->getUniform("lightPos"), 3.0+lightTrans, 8.0, 7);
+		// glUniform3f(texProg->getUniform("lightPos"), 3.0+lightTrans, 8.0, 7);
+        glUniform3f(texProg->getUniform("lightPos"), g_eye.x-0.5, g_eye.y, g_eye.z-0.5);
         glUniform1i(texProg->getUniform("flip"), 1);
+
+        // Model->pushMatrix();
+        //     Model->translate(vec3(15, -1.25, 31));
+        //     Model->scale(vec3(0.5, 0.5, 0.5));
+        //     statueTex->bind(texProg->getUniform("Texture0"));
+        //     glUniformMatrix4fv(texProg->getUniform("M"), 1, GL_FALSE, value_ptr(Model->topMatrix()));
+        //     for (int i=0; i < statueMesh.size(); i++) {
+        //         statueMesh[i]->draw(texProg);
+        //     }
+        // Model->popMatrix();
+
+        Model->pushMatrix();
+            Model->translate(vec3(14.5, -1.25, 31.25));
+            Model->rotate(-PI/2, vec3(0, 1, 0));
+            Model->scale(vec3(0.0125, 0.0125, 0.0125));
+            statueTex2->bind(texProg->getUniform("Texture0"));
+            glUniformMatrix4fv(texProg->getUniform("M"), 1, GL_FALSE, value_ptr(Model->topMatrix()));
+            for (int i=0; i < statueMesh.size(); i++) {
+                statueMesh2[i]->draw(texProg);
+            }
+        Model->popMatrix();
+
+        Model->pushMatrix();
+            Model->translate(vec3(17.5, -1.25, 31.25));
+            Model->rotate(-PI/2, vec3(0, 1, 0));
+            Model->scale(vec3(0.0125, 0.0125, 0.0125));
+            statueTex2->bind(texProg->getUniform("Texture0"));
+            glUniformMatrix4fv(texProg->getUniform("M"), 1, GL_FALSE, value_ptr(Model->topMatrix()));
+            for (int i=0; i < statueMesh.size(); i++) {
+                statueMesh2[i]->draw(texProg);
+            }
+        Model->popMatrix();
 
         // for (int i=0; i < 31; i++) {
         //     for (int j=0; j < 31; j++) {
         //         if (occupancy[i][j] == 1) {
         //             vec3 tmp = mapSpaces(i, j);
-        //             drawBigTree(Model, texProg, tmp.x, tmp.z);
+        //             drawTree(Model, texProg, tmp.x, tmp.z);
         //         }
         //     }
         // }
@@ -935,6 +1256,21 @@ public:
         // }
         // drawLamps(Model, texProg);
         // drawRoad(Model, texProg);
+
+        hedge->bind(texProg->getUniform("Texture0"));
+        for (int i=0; i < 31; i++) {
+            for (int j=0; j < 31; j++) {
+                if (occupancy[i][j] == 1) {
+                    vec3 tmp = mapSpaces(i, j);
+                    Model->pushMatrix();
+                    Model->translate(vec3(tmp.x, 0, tmp.z));
+                    Model->scale(vec3(2, 2, 2));
+                    glUniformMatrix4fv(texProg->getUniform("M"), 1, GL_FALSE, value_ptr(Model->topMatrix()));
+                    cubeTex->draw(texProg);
+                    Model->popMatrix();
+                }
+            }
+        }
 
         glUniform1i(texProg->getUniform("flip"), 1);
 		drawGround(texProg);
@@ -969,20 +1305,14 @@ public:
 
         prog->bind();
         glUniformMatrix4fv(prog->getUniform("P"), 1, GL_FALSE, value_ptr(Projection->topMatrix()));
+        glUniform3f(prog->getUniform("lightPos"), g_eye.x-0.5, g_eye.y, g_eye.z-0.5);
 		SetView(prog);
-        for (int i=0; i < 31; i++) {
-            for (int j=0; j < 31; j++) {
-                if (occupancy[i][j] == 1) {
-                    vec3 tmp = mapSpaces(i, j);
-                    Model->pushMatrix();
-                    Model->translate(vec3(tmp.x, 0, tmp.z));
-                    Model->scale(vec3(1.5, 1.5, 1.5));
-                    glUniformMatrix4fv(prog->getUniform("M"), 1, GL_FALSE,value_ptr(Model->topMatrix()));
-                    cube->draw(prog);
-                    Model->popMatrix();
-                }
-            }
-        }
+        //drawWalls(prog);
+        //Model->scale(vec3(2, 2, 2));
+        //glUniformMatrix4fv(prog->getUniform("M"), 1, GL_FALSE,value_ptr(Model->topMatrix()));
+        //cube->draw(prog, "instance");
+        SetMaterial(prog, 2);
+        drawDummy(Model, prog);
         prog->unbind();
 
 		//use the material shader
