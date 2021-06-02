@@ -87,7 +87,7 @@ void Shape::computeNormals()
     }
 }
 
-void Shape::init(string type)
+void Shape::init()
 {
 	// Initialize the vertex array object
 	CHECKED_GL_CALL(glGenVertexArrays(1, &vaoID));
@@ -97,22 +97,6 @@ void Shape::init(string type)
 	CHECKED_GL_CALL(glGenBuffers(1, &posBufID));
 	CHECKED_GL_CALL(glBindBuffer(GL_ARRAY_BUFFER, posBufID));
 	CHECKED_GL_CALL(glBufferData(GL_ARRAY_BUFFER, posBuf.size()*sizeof(float), &posBuf[0], GL_STATIC_DRAW));
-
-    if (type == "instance") {
-        // glGenVertexArrays(1, &instanceID);
-        // glBindVertexArray(instanceID);
-
-        //generate vertex buffer to hand off to OGL - using instancing
-        glGenBuffers(1, &instanceID);
-        //set the current state to focus on our vertex buffer
-        glBindBuffer(GL_ARRAY_BUFFER, instanceID);
-        //actually memcopy the data - only do this once
-        glBufferData(GL_ARRAY_BUFFER, positions.size()*sizeof(float), &positions[0], GL_STATIC_DRAW);
-        // CHECKED_GL_CALL(glGenBuffers(1, &instanceID));
-        // CHECKED_GL_CALL(glBindBuffer(GL_ARRAY_BUFFER, instanceID));
-        // CHECKED_GL_CALL(glBufferData(GL_ARRAY_BUFFER, positions.size()*sizeof(glm::vec3), &positions[0], GL_STATIC_DRAW));
-        // CHECKED_GL_CALL(glBindBuffer(GL_ARRAY_BUFFER, 0));
-    }
 
 	// Send the normal array to the GPU
 	if (norBuf.empty())
@@ -149,7 +133,7 @@ void Shape::init(string type)
 	CHECKED_GL_CALL(glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0));
 }
 
-void Shape::draw(const shared_ptr<Program> prog, string type) const
+void Shape::draw(const shared_ptr<Program> prog) const
 {
 	int h_pos, h_nor, h_tex, h_inst;
 	h_pos = h_nor = h_tex = h_inst = -1;
@@ -157,12 +141,10 @@ void Shape::draw(const shared_ptr<Program> prog, string type) const
 	CHECKED_GL_CALL(glBindVertexArray(vaoID));
 
 	// Bind position buffer
-    if (type != "instance") {
-        h_pos = prog->getAttribute("vertPos");
-        GLSL::enableVertexAttribArray(h_pos);
-        CHECKED_GL_CALL(glBindBuffer(GL_ARRAY_BUFFER, posBufID));
-        CHECKED_GL_CALL(glVertexAttribPointer(h_pos, 3, GL_FLOAT, GL_FALSE, 0, (const void *)0));
-    }
+    h_pos = prog->getAttribute("vertPos");
+    GLSL::enableVertexAttribArray(h_pos);
+    CHECKED_GL_CALL(glBindBuffer(GL_ARRAY_BUFFER, posBufID));
+    CHECKED_GL_CALL(glVertexAttribPointer(h_pos, 3, GL_FLOAT, GL_FALSE, 0, (const void *)0));
 
 	// Bind normal buffer
 	h_nor = prog->getAttribute("vertNor");
@@ -171,9 +153,6 @@ void Shape::draw(const shared_ptr<Program> prog, string type) const
 		GLSL::enableVertexAttribArray(h_nor);
 		CHECKED_GL_CALL(glBindBuffer(GL_ARRAY_BUFFER, norBufID));
 		CHECKED_GL_CALL(glVertexAttribPointer(h_nor, 3, GL_FLOAT, GL_FALSE, 0, (const void *)0));
-        // if (type == "instance") {
-        //     glVertexAttribDivisor(h_nor, 1);
-        // }
 	}
 
 	if (texBufID != 0)
@@ -186,9 +165,6 @@ void Shape::draw(const shared_ptr<Program> prog, string type) const
 			GLSL::enableVertexAttribArray(h_tex);
 			CHECKED_GL_CALL(glBindBuffer(GL_ARRAY_BUFFER, texBufID));
 			CHECKED_GL_CALL(glVertexAttribPointer(h_tex, 2, GL_FLOAT, GL_FALSE, 0, (const void *)0));
-            // if (type == "instance") {
-            //     glVertexAttribDivisor(h_tex, 1);
-            // }
 		}
 	}
 
@@ -196,35 +172,7 @@ void Shape::draw(const shared_ptr<Program> prog, string type) const
 	CHECKED_GL_CALL(glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, eleBufID));
 
 	// Draw
-    if (type == "instance") {
-        //glBindVertexArray(instanceID);
-        h_inst = prog->getAttribute("vertPos");
-        GLSL::enableVertexAttribArray(h_inst);
-        // //std::cout << "Any Gl errors1: " << glGetError() << std::endl;
-        glBindBuffer(GL_ARRAY_BUFFER, instanceID);
-        //std::cout << "Any Gl errors2: " << glGetError() << std::endl;
-        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, (const void*)0);
-        glVertexAttribDivisor(0, 1);
-        // //glVertexAttribDivisor(1, 1);
-        // // Draw the points !
-        glDrawArraysInstanced(GL_TRIANGLES, 0, (int)eleBuf.size(), positions.size()/3);
-
-        glVertexAttribDivisor(0, 0);
-        //glVertexAttribDivisor(1, 0);	
-
-        //glDisableVertexAttribArray(0);
-        // h_inst = prog->getAttribute("treePos");
-        // GLSL::enableVertexAttribArray(h_inst);
-        // h_pos = prog->getAttribute("vertPos");
-        // GLSL::enableVertexAttribArray(h_pos);
-        // CHECKED_GL_CALL(glBindBuffer(GL_ARRAY_BUFFER, instanceID));
-        // CHECKED_GL_CALL(glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, (const void*)0));
-        // CHECKED_GL_CALL(glVertexAttribDivisor(0, 1));  
-        // CHECKED_GL_CALL(glBindBuffer(GL_ARRAY_BUFFER, 0));
-        // CHECKED_GL_CALL(glDrawElementsInstanced(GL_TRIANGLES, (int)eleBuf.size(), GL_UNSIGNED_INT, (const void *)0, positions.size()/3)); 
-    } else {
-        CHECKED_GL_CALL(glDrawElements(GL_TRIANGLES, (int)eleBuf.size(), GL_UNSIGNED_INT, (const void *)0));
-    }
+    CHECKED_GL_CALL(glDrawElements(GL_TRIANGLES, (int)eleBuf.size(), GL_UNSIGNED_INT, (const void *)0));
 
 	// Disable and unbind
 	if (h_tex != -1)

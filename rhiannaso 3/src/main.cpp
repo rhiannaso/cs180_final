@@ -13,9 +13,12 @@
 #include "GLSL.h"
 #include "Program.h"
 #include "Shape.h"
+#include "ShapeInst.h"
+#include "Keyframe.h"
 #include "MatrixStack.h"
 #include "WindowManager.h"
 #include "Texture.h"
+#include "util.h"
 #include "stb_image.h"
 #include "Bezier.h"
 #include "Spline.h"
@@ -47,6 +50,8 @@ public:
     //Our shader program for skybox
 	std::shared_ptr<Program> cubeProg;
 
+    std::shared_ptr<Program> progInst;
+
 	//our geometry
 	shared_ptr<Shape> sphere;
 
@@ -55,24 +60,39 @@ public:
 	shared_ptr<Shape> cube;
 
     shared_ptr<Shape> cubeTex;
+    vector<shared_ptr<ShapeInst>> cubeInst;
 
     shared_ptr<Shape> roadObj;
     shared_ptr<Shape> lampMesh;
     vector<shared_ptr<Shape>> houseMesh;
-    vector<shared_ptr<Shape>> treeMesh;
-    vector<shared_ptr<Shape>> bigTreeMesh;
     vector<shared_ptr<Shape>> carMesh;
     vector<shared_ptr<Shape>> dummyMesh;
     vector<shared_ptr<Shape>> statueMesh;
     vector<shared_ptr<Shape>> statueMesh2;
+    vector<shared_ptr<Shape>> axeMesh;
     vector<vec3> dummyMin;
     vector<vec3> dummyMax;
 
     vector<tinyobj::material_t> houseMat;
     vector<tinyobj::material_t> carMat;
+    vector<tinyobj::material_t> treeMat;
     map<string, shared_ptr<Texture>> textureMap;
 
     float driveTheta = 0;
+    int frame = 0;
+    bool newFrame = true;
+    vector<float> lArmKF{0, PI/10.0, PI/8.0, 0, -PI/10.0, -PI/8.0};
+    vector<float> rArmKF{0, PI/10.0, PI/8.0, 0, -PI/10.0, -PI/8.0};
+    vector<float> lLegKF{PI/8.0, PI/10.0, 0, -PI/8.0, -PI/10.0, 0};
+    vector<float> lKneeKF{0, PI/4.0, PI/3.0, 0, 0, 0};
+    vector<float> rLegKF{-PI/8.0, -PI/10.0, 0, PI/8.0, PI/10.0, 0};
+    vector<float> rKneeKF{0, 0, 0, 0, PI/4.0, PI/3.0};
+    // vector<Keyframe> lArmKF;
+    // vector<Keyframe> rArmKF;
+    // vector<Keyframe> lLegKF;
+    // vector<Keyframe> lKneeKF;
+    // vector<Keyframe> rLegKF;
+    // vector<Keyframe> rKneeKF;
 
     //skybox data
     vector<std::string> faces {
@@ -112,14 +132,19 @@ public:
     shared_ptr<Texture> dirt;
     shared_ptr<Texture> statueTex;
     shared_ptr<Texture> statueTex2;
+    shared_ptr<Texture> spruceLeaf;
+    shared_ptr<Texture> spruceTrunk;
+    shared_ptr<Texture> firLeaf;
+    shared_ptr<Texture> firTrunk;
+    shared_ptr<Texture> axeTex;
 
 	//animation data
 	float lightTrans = 0;
 
     int occupancy[31][31] = {0};
     vector<float> positions;
+    glm::mat4 *modelMatrices;
     int numWalls = 0;
-    GLuint instanceVBO;
 
     bool setLaunch = true;
 
@@ -127,11 +152,22 @@ public:
 	double g_phi, g_theta;
 	vec3 view = vec3(0, 0, 1);
 	vec3 strafe = vec3(1, 0, 0);
-	vec3 g_eye = vec3(16, 0, 33);
+	//vec3 g_eye = vec3(16, 0, 33);
+    vec3 g_eye = vec3(mapSpaces(11, 15).x, 0, mapSpaces(11, 15).z);
     // vec3 g_eye = vec3(0, 60, 10);
     // vec3 g_lookAt = vec3(0, 0, 0);
 	vec3 g_lookAt = vec3(16, 0, 30);
     float speed = 0.3;
+
+    vec3 dummyLoc = vec3(16, -1.25, 30);
+
+    // Chopping actions
+    int hasAxe = 0;
+    bool firstAct = true;
+    float axe_scale[3] = {0.001, 0.001, 0.001};
+    float axe_x[3] = {mapSpaces(11, 15).x, mapSpaces(13, 5).x, mapSpaces(27, 17).x};
+    float axe_z[3] = {mapSpaces(11, 15).z, mapSpaces(13, 5).z, mapSpaces(27, 17).z};
+    bool axe_taken[3] = {false, false, false};
 
 	Spline splinepath[2];
 	bool goCamera = false;
@@ -151,6 +187,62 @@ public:
 		if (key == GLFW_KEY_Z && action == GLFW_PRESS) {
 			glPolygonMode( GL_FRONT_AND_BACK, GL_LINE );
 		}
+        if (key == GLFW_KEY_T && action == GLFW_PRESS) { // Chopping down trees
+            vec2 tmp = findMySpace(g_eye);
+            if (hasAxe > 0 && firstAct) {
+                vec2 chopLoc = findMySpace(g_lookAt);
+                float i = chopLoc.x;
+                float j = chopLoc.y;
+                vec3 view = g_eye-g_lookAt;
+                cout << "VIEW: " << view.x << endl;
+                cout << "VIEW: " << view.z << endl;
+                view = vec3(round(view.x), round(view.y), round(view.z));
+                mat4 s = glm::scale(glm::mat4(1.0f), glm::vec3(0.0));
+                if (view.x > 0) {
+                    j -= 1;
+                } else if (view.x < 0) {
+                    j += 1;
+                } else {
+                    if (view.z > 0) {
+                        i -= 1;
+                    } else if (view.z < 0) {
+                        i += 1;
+                    }
+                }
+                cout << i << endl;
+                cout << j << endl;
+                if (occupancy[(int)i][(int)j] != 0) { // Only act if facing a tree
+                    occupancy[(int)i][(int)j] = 0; // mark as barrier gone
+                    modelMatrices[(int)i*31+(int)j] = s; // redraw with tree gone
+                    for (int k=0; k < cubeInst.size(); k++) {
+                        cubeInst[k]->update(modelMatrices);
+                    }
+                    cout << "Chopping" << endl;
+                    hasAxe -= 1;
+                    firstAct = false;
+                }
+            }
+            if (hasAxe == 0 && firstAct) {
+                if (tmp.x == 11 && tmp.y == 15 && !axe_taken[0]) {
+                    axe_scale[0] = 0;
+                    axe_taken[0] = true;
+                    cout << "Got axe" << endl;
+                    hasAxe += 1;
+                } if (tmp.x == 13 && tmp.y == 5 && !axe_taken[1]) {
+                    axe_scale[1] = 0;
+                    axe_taken[1] = true;
+                    cout << "Got axe" << endl;
+                    hasAxe += 1;
+                } if (tmp.x == 27 && tmp.y == 17 && !axe_taken[2]) {
+                    axe_scale[2] = 0;
+                    axe_taken[2] = true;
+                    cout << "Got axe" << endl;
+                    hasAxe += 1;
+                }
+                firstAct = false;
+            }
+            firstAct = true;
+		}
 		if (key == GLFW_KEY_G && action == GLFW_RELEASE) {
 			goCamera = !goCamera;
             if (!goCamera)
@@ -159,6 +251,7 @@ public:
         if (key == GLFW_KEY_W && action == GLFW_PRESS){
 			view = g_lookAt - g_eye;
             if (!detectCollision(g_eye + (speed*view)) && !detectHeight(g_eye + (speed*view))) {
+                // dummyLoc = dummyLoc + (speed*view);
                 g_eye = g_eye + (speed*view);
                 g_lookAt = g_lookAt + (speed*view);
             }
@@ -167,6 +260,7 @@ public:
             view = g_lookAt - g_eye;
             strafe = cross(view, vec3(0, 1, 0));
             if (!detectCollision(g_eye - (speed*strafe)) && !detectHeight(g_eye - (speed*strafe))) {
+                // dummyLoc = dummyLoc - (speed*strafe);
                 g_eye = g_eye - (speed*strafe);
                 g_lookAt = g_lookAt - (speed*strafe);
             }
@@ -174,6 +268,7 @@ public:
         if (key == GLFW_KEY_S && action == GLFW_PRESS){
 			view = g_lookAt - g_eye;
             if (!detectCollision(g_eye - (speed*view)) && !detectHeight(g_eye - (speed*view))) {
+                // dummyLoc = dummyLoc - (speed*view);
                 g_eye = g_eye - (speed*view);
                 g_lookAt = g_lookAt - (speed*view);
             }
@@ -182,6 +277,7 @@ public:
             view = g_lookAt - g_eye;
             strafe = cross(view, vec3(0, 1, 0));
             if (!detectCollision(g_eye + (speed*strafe)) && !detectHeight(g_eye + (speed*strafe))) {
+                // dummyLoc = dummyLoc + (speed*strafe);
                 g_eye = g_eye + (speed*strafe);
                 g_lookAt = g_lookAt + (speed*strafe);
             }
@@ -206,7 +302,7 @@ public:
     }
 
     bool detectHeight(vec3 myPos) {
-        if (myPos.y > 2)
+        if (myPos.y > 0.5 || myPos.y < -0.05)
             return true;
         else
             return false;
@@ -349,41 +445,61 @@ public:
   		glass->setUnit(13);
   		glass->setWrapModes(GL_CLAMP_TO_EDGE, GL_CLAMP_TO_EDGE);
 
-        bark = make_shared<Texture>();
-  		bark->setFilename(resourceDirectory + "/bigTree/bark.png");
-  		bark->init();
-  		bark->setUnit(14);
-  		bark->setWrapModes(GL_REPEAT, GL_REPEAT);
-
-        bigLeaf = make_shared<Texture>();
-  		bigLeaf->setFilename(resourceDirectory + "/bigTree/leaf.png");
-  		bigLeaf->init();
-  		bigLeaf->setUnit(15);
-  		bigLeaf->setWrapModes(GL_CLAMP_TO_EDGE, GL_CLAMP_TO_EDGE);
-
         hedge = make_shared<Texture>();
   		hedge->setFilename(resourceDirectory + "/hedge.jpg");
   		hedge->init();
-  		hedge->setUnit(16);
+  		hedge->setUnit(14);
   		hedge->setWrapModes(GL_CLAMP_TO_EDGE, GL_CLAMP_TO_EDGE);
 
         dirt = make_shared<Texture>();
   		dirt->setFilename(resourceDirectory + "/ground.jpg");
   		dirt->init();
-  		dirt->setUnit(17);
+  		dirt->setUnit(15);
   		dirt->setWrapModes(GL_REPEAT, GL_REPEAT);
 
         statueTex = make_shared<Texture>();
   		statueTex->setFilename(resourceDirectory + "/statue/statue.jpg");
   		statueTex->init();
-  		statueTex->setUnit(18);
+  		statueTex->setUnit(16);
   		statueTex->setWrapModes(GL_CLAMP_TO_EDGE, GL_CLAMP_TO_EDGE);
 
         statueTex2 = make_shared<Texture>();
   		statueTex2->setFilename(resourceDirectory + "/statue2/mm_facade_sculpture_03_diffus.jpg");
   		statueTex2->init();
-  		statueTex2->setUnit(19);
+  		statueTex2->setUnit(17);
   		statueTex2->setWrapModes(GL_CLAMP_TO_EDGE, GL_CLAMP_TO_EDGE);
+
+        spruceLeaf = make_shared<Texture>();
+  		spruceLeaf->setFilename(resourceDirectory + "/Spruce_obj/Spruce_branches.png");
+  		spruceLeaf->init();
+  		spruceLeaf->setUnit(18);
+  		spruceLeaf->setWrapModes(GL_REPEAT, GL_REPEAT);
+        textureMap.insert(pair<string, shared_ptr<Texture>>("Spruce_branches.png", spruceLeaf));
+
+        spruceTrunk = make_shared<Texture>();
+  		spruceTrunk->setFilename(resourceDirectory + "/Spruce_obj/Spruce_trunk.jpeg");
+  		spruceTrunk->init();
+  		spruceTrunk->setUnit(19);
+  		spruceTrunk->setWrapModes(GL_REPEAT, GL_REPEAT);
+        textureMap.insert(pair<string, shared_ptr<Texture>>("Spruce_trunk.jpeg", spruceTrunk));
+
+        firLeaf = make_shared<Texture>();
+  		firLeaf->setFilename(resourceDirectory + "/fir/branch.png");
+  		firLeaf->init();
+  		firLeaf->setUnit(20);
+  		firLeaf->setWrapModes(GL_REPEAT, GL_REPEAT);
+
+        firTrunk = make_shared<Texture>();
+  		firTrunk->setFilename(resourceDirectory + "/fir/bark.jpg");
+  		firTrunk->init();
+  		firTrunk->setUnit(21);
+  		firTrunk->setWrapModes(GL_REPEAT, GL_REPEAT);
+
+        axeTex = make_shared<Texture>();
+  		axeTex->setFilename(resourceDirectory + "/axe/axe.png");
+  		axeTex->init();
+  		axeTex->setUnit(22);
+  		axeTex->setWrapModes(GL_CLAMP_TO_EDGE, GL_CLAMP_TO_EDGE);
     }
 
 	void init(const std::string& resourceDirectory)
@@ -444,6 +560,24 @@ public:
 		cubeProg->addAttribute("vertPos");
 		cubeProg->addAttribute("vertNor");
 
+        progInst = make_shared<Program>();
+		progInst->setVerbose(true);
+		progInst->setShaderNames(resourceDirectory + "/simple_verti.glsl", resourceDirectory + "/tex_frag0.glsl");
+		progInst->init();
+		progInst->addUniform("P");
+		progInst->addUniform("V");
+        // progInst->addUniform("flip");
+        // progInst->addUniform("MatAmb");
+		// progInst->addUniform("MatDif");
+		// progInst->addUniform("MatSpec");
+        progInst->addUniform("Texture0");
+		progInst->addUniform("MatShine");
+        progInst->addUniform("lightPos");
+		progInst->addAttribute("vertPos");
+		progInst->addAttribute("vertNor");
+        progInst->addAttribute("vertTex");
+		progInst->addAttribute("instanceMatrix");
+
   		// init splines up and down
     //    splinepath[0] = Spline(glm::vec3(-6,3,5), glm::vec3(-1,0,5), glm::vec3(1, 5, 5), glm::vec3(3,3,5), 5);
     //    splinepath[1] = Spline(glm::vec3(3,3,5), glm::vec3(4,1,5), glm::vec3(-0.75, 0.25, 5), glm::vec3(0,0,5), 5);
@@ -473,6 +607,42 @@ public:
         glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE);
         cout << " creating cube map any errors : " << glGetError() << endl;
         return textureID;
+    }
+
+    void initKeyframes() {
+        // vector<float> arms{0, PI/8.0, 0, -PI/8.0};
+        // for (int i=0; i < arms.size(); i++) {
+        //     if (i != arms.size()-1) {
+        //         Keyframe tmp = Keyframe(arms[i], arms[i+1], 1);
+        //         lArmKF.push_back(tmp);
+        //         rArmKF.push_back(tmp);
+        //     }
+        // }
+        // vector<float> legs{PI/6.0, 0, -PI/6.0, 0};
+        // for (int i=0; i < legs.size(); i++) {
+        //     if (i != legs.size()-1) {
+        //         Keyframe tmp = Keyframe(legs[i], legs[i+1], 1);
+        //         lLegKF.push_back(tmp);
+        //     }
+        //     if (i != legs.size()-1) {
+        //         Keyframe tmp = Keyframe(-1*legs[i], -1*legs[i+1], 1);
+        //         rLegKF.push_back(tmp);
+        //     }
+        // }
+        // vector<float> lKnee{0, PI/3.0, 0, 0};
+        // for (int i=0; i < lKnee.size(); i++) {
+        //     if (i != lKnee.size()-1) {
+        //         Keyframe tmp = Keyframe(lKnee[i], lKnee[i+1], 1);
+        //         lKneeKF.push_back(tmp);
+        //     }
+        // }
+        // vector<float> rKnee{0, 0, 0, PI/3.0};
+        // for (int i=0; i < rKnee.size(); i++) {
+        //     if (i != rKnee.size()-1) {
+        //         Keyframe tmp = Keyframe(rKnee[i], rKnee[i+1], 1);
+        //         rKneeKF.push_back(tmp);
+        //     }
+        // }
     }
 
 	void initGeom(const std::string& resourceDirectory)
@@ -523,6 +693,20 @@ public:
             }
 		}
 
+        rc = tinyobj::LoadObj(TOshapes, objMaterials, errStr, (resourceDirectory + "/axe/axe.obj").c_str());
+		if (!rc) {
+			cerr << errStr << endl;
+		} else {
+			for (int i = 0; i < TOshapes.size(); i++) {
+                shared_ptr<Shape> tmp = make_shared<Shape>();
+                tmp->createShape(TOshapes[i]);
+                tmp->measure();
+                tmp->init();
+
+                axeMesh.push_back(tmp);
+            }
+		}
+
         rc = tinyobj::LoadObj(TOshapes, objMaterials, errStr, (resourceDirectory + "/cube_tex.obj").c_str());
 		if (!rc) {
 			cerr << errStr << endl;
@@ -533,6 +717,41 @@ public:
 			cubeTex->init();
 		}
 
+        float numSlots = 961;
+        modelMatrices = new glm::mat4[numSlots];
+        float rowSize = 31.0f;
+		for(int i = 0; i < numSlots/rowSize ; i++) {
+			for (int j=0; j < (int)rowSize; j++) {
+                vec3 tmp = mapSpaces(i, j);
+    			glm::mat4 model = glm::mat4(1.0f);
+    			mat4 t1 = glm::translate(glm::mat4(1.0f), glm::vec3(tmp.x, tmp.y, tmp.z));
+                mat4 r = glm::rotate(glm::mat4(1.0f), (float)(-PI/2), vec3(1, 0, 0));
+                mat4 s;
+                if (occupancy[i][j] == 1) {
+    			    s = glm::scale(glm::mat4(1.0f), glm::vec3(0.45));
+                } else {
+                    s = glm::scale(glm::mat4(1.0f), glm::vec3(0.0));
+                }
+    			modelMatrices[i*(int)rowSize+j] = t1*r*s;
+    	  	}
+		}
+
+        rc = tinyobj::LoadObj(TOshapes, treeMat, errStr, (resourceDirectory + "/Spruce_obj/Spruce.obj").c_str(), (resourceDirectory + "/Spruce_obj/").c_str());
+        // rc = tinyobj::LoadObj(TOshapes, objMaterials, errStr, (resourceDirectory + "/fir/fir.obj").c_str());
+  		if (!rc) {
+    		cerr << errStr << endl;
+  		} else {
+    		for (int i=0; i < TOshapes.size(); i++) {
+      		// Initialize each mesh.
+      			shared_ptr<ShapeInst> s = make_shared<ShapeInst>(numSlots);
+      			s->createShape(TOshapes[i]);
+      			s->measure();
+      			s->init(modelMatrices);
+
+      			cubeInst.push_back(s);
+    		}
+  		}
+
         rc = tinyobj::LoadObj(TOshapes, objMaterials, errStr, (resourceDirectory + "/cube.obj").c_str());
 		if (!rc) {
 			cerr << errStr << endl;
@@ -540,20 +759,6 @@ public:
 			cube = make_shared<Shape>();
 			cube->createShape(TOshapes[0]);
 			cube->measure();
-
-            int index = 0;
-
-            for (int i=0; i < 31; i++) {
-                for (int j=0; j < 31; j++) {
-                    if (occupancy[i][j] == 1) {
-                        vec3 tmp = mapSpaces(i, j);
-                        positions.push_back(tmp.x);
-                        positions.push_back(tmp.y);
-                        positions.push_back(tmp.z);
-                    }
-                }
-            }
-            cube->setPos(positions);
 
 			cube->init();
 		}
@@ -572,10 +777,6 @@ public:
                 dummyMax.push_back(tmp->max);
                 dummyMesh.push_back(tmp);
             }
-            // for (int i=0; i < dummyMin.size(); i++) {
-            //     cout << i << " min: " << dummyMin[i].x << " " << dummyMin[i].y << " " << dummyMin[i].z << endl;
-            //     cout << i << " max: " << dummyMax[i].x << " " << dummyMax[i].y << " " << dummyMax[i].z << endl;
-            // }
 		}
 
         rc = tinyobj::LoadObj(TOshapes, carMat, errStr, (resourceDirectory + "/car/car.obj").c_str(), (resourceDirectory + "/car/").c_str());
@@ -616,20 +817,6 @@ public:
             lampMesh->init();
 		}
 
-        rc = tinyobj::LoadObj(TOshapes, objMaterials, errStr, (resourceDirectory + "/tree/MapleTree.obj").c_str());
-        if (!rc) {
-			cerr << errStr << endl;
-		} else {
-            for (int i = 0; i < TOshapes.size(); i++) {
-                shared_ptr<Shape> tmp = make_shared<Shape>();
-                tmp->createShape(TOshapes[i]);
-                tmp->measure();
-                tmp->init();
-
-                treeMesh.push_back(tmp);
-            }
-		}
-
         rc = tinyobj::LoadObj(TOshapes, objMaterials, errStr, (resourceDirectory + "/road.obj").c_str());
         if (!rc) {
 			cerr << errStr << endl;
@@ -640,25 +827,12 @@ public:
 			roadObj->init();
 		}
 
-        rc = tinyobj::LoadObj(TOshapes, objMaterials, errStr, (resourceDirectory + "/bigTree/tree.obj").c_str());
-        if (!rc) {
-			cerr << errStr << endl;
-		} else {
-            for (int i = 0; i < TOshapes.size(); i++) {
-                shared_ptr<Shape> tmp = make_shared<Shape>();
-                tmp->createShape(TOshapes[i]);
-                tmp->measure();
-                tmp->init();
-
-                bigTreeMesh.push_back(tmp);
-            }
-		}
-
-
         cubeMapTexture = createSky("../resources/sky/", faces);
 
 		//code to load in the ground plane (CPU defined data passed to GPU)
 		initGround();
+
+        //initKeyframes();
 	}
 
 	//directly pass quad for the ground to the GPU
@@ -769,7 +943,7 @@ public:
 	}
 
     void SetGenericMat(shared_ptr<Program> curS, float ambient[3], float diffuse[3], float specular[3], float shininess, string type) {
-        if (type == "house") {
+        if (type == "house" || type == "tree") {
             glUniform1f(curS->getUniform("MatShine"), shininess);
         } else {
             if (type == "car") {
@@ -854,40 +1028,7 @@ public:
     vec3 mapSpaces(int i, int j) {
         float x = (2*j) - 30;
         float z = (2*i) - 30;
-        return vec3(x, -1.25, z);
-    }
-
-    void drawBigTree(shared_ptr<MatrixStack> Model, shared_ptr<Program> prog, float xPos, float zPos) {
-        Model->pushMatrix();
-            Model->translate(vec3(xPos, -1.25, zPos));
-            Model->scale(vec3(0.2, 0.2, 0.2));
-
-            setModel(prog, Model);
-            for (int i=0; i < bigTreeMesh.size(); i++) {
-                if (i == 0)
-                    bigLeaf->bind(prog->getUniform("Texture0"));
-                else
-                    bark->bind(prog->getUniform("Texture0"));
-                bigTreeMesh[i]->draw(prog);
-            }
-        Model->popMatrix();
-    }
-
-    void drawTree(shared_ptr<MatrixStack> Model, shared_ptr<Program> prog, float xPos, float zPos) {
-        Model->pushMatrix();
-            Model->translate(vec3(xPos, -1.25, zPos));
-            Model->scale(vec3(0.09, 0.09, 0.09));
-
-            setModel(prog, Model);
-            for (int i=0; i < treeMesh.size(); i++) {
-                if (i == 0) {
-                    lightWood->bind(prog->getUniform("Texture0"));
-                } else {
-                    leaf->bind(prog->getUniform("Texture0"));
-                }
-                treeMesh[i]->draw(prog);
-            }
-        Model->popMatrix();
+        return vec3(x, -1.2, z);
     }
 
     void drawLamps(shared_ptr<MatrixStack> Model, shared_ptr<Program> prog) {
@@ -925,10 +1066,28 @@ public:
         return vec3(x, y, z);
     }
 
-    void drawDummy(shared_ptr<MatrixStack> Model, shared_ptr<Program> prog) {
+    void handleInterpolation(Keyframe k, float frametime, shared_ptr<MatrixStack> Model, vec3 axis) { // return index of keyframe to trigger
+        if (newFrame) {
+            k.setTimeSince(glfwGetTime());
+            newFrame = false;
+        }
+        if(!k.isDone()){
+       		k.update(frametime);
+            float angle = k.interpolate();
+            Model->rotate(angle, axis);
+        } else {
+            frame = (++frame)%4;
+            k.resetCurrTime();
+            newFrame = true;
+        }
+    }
+
+    void drawDummy(shared_ptr<MatrixStack> Model, shared_ptr<Program> prog, float frametime) {
         vec3 tmp;
+        int frame = (int)(glfwGetTime()*5)%6;
         Model->pushMatrix();
-            Model->translate(vec3(16, -1.25, 30));
+            Model->translate(vec3(dummyLoc.x, dummyLoc.y, dummyLoc.z));
+            //Model->translate(vec3((g_eye.x+(speed*view.x)), -1.25, (g_eye.z+(speed*view.z))));
             Model->scale(vec3(0.01, 0.01, 0.01));
             //Model->rotate(-PI/2.0, vec3(0, 1, 0));
             Model->rotate(-PI/2.0, vec3(1, 0, 0));
@@ -945,7 +1104,9 @@ public:
             Model->pushMatrix();
                 Model->translate(vec3(1.0f*dummyMesh[21]->min.x, 1.0f*dummyMesh[21]->min.y, 1.0f*dummyMesh[21]->max.z));
                 Model->rotate(-PI/2.4, vec3(1, 0, 0));
-                Model->rotate(-PI/8.0, vec3(0, 0, 1));
+                // Model->rotate(-PI/8.0, vec3(0, 0, 1));
+                Model->rotate(lArmKF[frame], vec3(0, 0, 1));
+                //handleInterpolation(lArmKF[frame], frametime, Model, vec3(0, 0, 1));
                 Model->translate(vec3(-1.0f*dummyMesh[21]->min.x, -1.0f*dummyMesh[21]->min.y, -1.0f*dummyMesh[21]->max.z));
                 setModel(prog, Model);
                 for (int i=21; i <=26; i++) {
@@ -959,7 +1120,9 @@ public:
                 tmp = findCenter(15);
                 Model->translate(vec3(1.0f*dummyMesh[15]->max.x, 1.0f*dummyMesh[15]->max.y, 1.0f*dummyMesh[15]->max.z));
                 Model->rotate(PI/2.4, vec3(1, 0, 0));
-                Model->rotate(-PI/8.0, vec3(0, 0, 1));
+                //Model->rotate(-PI/8.0, vec3(0, 0, 1));
+                // handleInterpolation(rArmKF[frame], frametime, Model, vec3(0, 0, 1));
+                Model->rotate(rArmKF[frame], vec3(0, 0, 1));
                 Model->translate(vec3(-1.0f*dummyMesh[15]->max.x, -1.0f*dummyMesh[15]->max.y, -1.0f*dummyMesh[15]->max.z));
                 setModel(prog, Model);
                 for (int i=15; i <=20; i++) {
@@ -971,6 +1134,8 @@ public:
             Model->pushMatrix();
                 Model->translate(vec3(1.0f*dummyMesh[11]->min.x, 1.0f*dummyMesh[11]->min.y, 1.0f*dummyMesh[11]->max.z));
                 //Model->rotate(-PI/6.0, vec3(0, 1, 0));
+                Model->rotate(lLegKF[frame], vec3(0, 1, 0));
+                // handleInterpolation(lLegKF[frame], frametime, Model, vec3(0, 1, 0));
                 Model->translate(vec3(-1.0f*dummyMesh[11]->min.x, -1.0f*dummyMesh[11]->min.y, -1.0f*dummyMesh[11]->max.z));
                 setModel(prog, Model);
                 dummyMesh[11]->draw(prog); // pelvis
@@ -979,6 +1144,8 @@ public:
                 // KEYFRAMES: none, PI/3.0, PI/4.0, none, none, 
                 Model->translate(vec3(1.0f*dummyMesh[9]->max.x, 1.0f*dummyMesh[9]->min.y, 1.0f*dummyMesh[9]->max.z));
                 //Model->rotate(PI/3.0, vec3(0, 1, 0));
+                Model->rotate(lKneeKF[frame], vec3(0, 1, 0));
+                // handleInterpolation(lKneeKF[frame], frametime, Model, vec3(0, 1, 0));
                 Model->translate(vec3(-1.0f*dummyMesh[9]->max.x, -1.0f*dummyMesh[9]->min.y, -1.0f*dummyMesh[9]->max.z));
                 setModel(prog, Model);
                 for (int i=6; i <=9; i++) {
@@ -991,6 +1158,8 @@ public:
                 tmp = findCenter(5);
                 Model->translate(vec3(1.0f*dummyMesh[5]->max.x, 1.0f*dummyMesh[5]->max.y, 1.0f*dummyMesh[5]->max.z));
                 //Model->rotate(PI/6.0, vec3(0, 1, 0));
+                Model->rotate(rLegKF[frame], vec3(0, 1, 0));
+                // handleInterpolation(rLegKF[frame], frametime, Model, vec3(0, 1, 0));
                 Model->translate(vec3(-1.0f*dummyMesh[5]->max.x, -1.0f*dummyMesh[5]->max.y, -1.0f*dummyMesh[5]->max.z));
                 setModel(prog, Model);
                 dummyMesh[5]->draw(prog); // pelvis
@@ -998,7 +1167,9 @@ public:
 
                 // KEYFRAMES: none, none, none, none, PI/3.0
                 Model->translate(vec3(1.0f*dummyMesh[9]->max.x, 1.0f*dummyMesh[9]->min.y, 1.0f*dummyMesh[9]->max.z));
-                Model->rotate(PI/3.0, vec3(0, 1, 0));
+                //Model->rotate(PI/3.0, vec3(0, 1, 0));
+                Model->rotate(rKneeKF[frame], vec3(0, 1, 0));
+                // handleInterpolation(rKneeKF[frame], frametime, Model, vec3(0, 1, 0));
                 Model->translate(vec3(-1.0f*dummyMesh[9]->max.x, -1.0f*dummyMesh[9]->min.y, -1.0f*dummyMesh[9]->max.z));
                 setModel(prog, Model);
                 for (int i=0; i <=3; i++) {
@@ -1195,134 +1366,135 @@ public:
 		Projection->pushMatrix();
 		Projection->perspective(45.0f, aspect, 0.01f, 100.0f);
 
-		// Draw the doggos
 		texProg->bind();
-		glUniformMatrix4fv(texProg->getUniform("P"), 1, GL_FALSE, value_ptr(Projection->topMatrix()));
-		SetView(texProg);
-		// glUniform3f(texProg->getUniform("lightPos"), 3.0+lightTrans, 8.0, 7);
-        glUniform3f(texProg->getUniform("lightPos"), g_eye.x-0.5, g_eye.y, g_eye.z-0.5);
-        glUniform1i(texProg->getUniform("flip"), 1);
+            glUniformMatrix4fv(texProg->getUniform("P"), 1, GL_FALSE, value_ptr(Projection->topMatrix()));
+            SetView(texProg);
+            // glUniform3f(texProg->getUniform("lightPos"), 3.0+lightTrans, 8.0, 7);
+            glUniform3f(texProg->getUniform("lightPos"), g_eye.x-0.5, g_eye.y, g_eye.z-0.5);
+            glUniform1i(texProg->getUniform("flip"), 1);
 
-        // Model->pushMatrix();
-        //     Model->translate(vec3(15, -1.25, 31));
-        //     Model->scale(vec3(0.5, 0.5, 0.5));
-        //     statueTex->bind(texProg->getUniform("Texture0"));
-        //     glUniformMatrix4fv(texProg->getUniform("M"), 1, GL_FALSE, value_ptr(Model->topMatrix()));
-        //     for (int i=0; i < statueMesh.size(); i++) {
-        //         statueMesh[i]->draw(texProg);
-        //     }
-        // Model->popMatrix();
+            // Model->pushMatrix();
+            //     Model->translate(vec3(15, -1.25, 31));
+            //     Model->scale(vec3(0.5, 0.5, 0.5));
+            //     statueTex->bind(texProg->getUniform("Texture0"));
+            //     glUniformMatrix4fv(texProg->getUniform("M"), 1, GL_FALSE, value_ptr(Model->topMatrix()));
+            //     for (int i=0; i < statueMesh.size(); i++) {
+            //         statueMesh[i]->draw(texProg);
+            //     }
+            // Model->popMatrix();
 
-        Model->pushMatrix();
-            Model->translate(vec3(14.5, -1.25, 31.25));
-            Model->rotate(-PI/2, vec3(0, 1, 0));
-            Model->scale(vec3(0.0125, 0.0125, 0.0125));
-            statueTex2->bind(texProg->getUniform("Texture0"));
-            glUniformMatrix4fv(texProg->getUniform("M"), 1, GL_FALSE, value_ptr(Model->topMatrix()));
-            for (int i=0; i < statueMesh.size(); i++) {
-                statueMesh2[i]->draw(texProg);
+            // Model->pushMatrix();
+            //     Model->translate(vec3(14.5, -1.25, 31.25));
+            //     Model->rotate(-PI/2, vec3(0, 1, 0));
+            //     Model->scale(vec3(0.0125, 0.0125, 0.0125));
+            //     statueTex2->bind(texProg->getUniform("Texture0"));
+            //     glUniformMatrix4fv(texProg->getUniform("M"), 1, GL_FALSE, value_ptr(Model->topMatrix()));
+            //     for (int i=0; i < statueMesh.size(); i++) {
+            //         statueMesh2[i]->draw(texProg);
+            //     }
+            // Model->popMatrix();
+
+            // Model->pushMatrix();
+            //     Model->translate(vec3(17.5, -1.25, 31.25));
+            //     Model->rotate(-PI/2, vec3(0, 1, 0));
+            //     Model->scale(vec3(0.0125, 0.0125, 0.0125));
+            //     statueTex2->bind(texProg->getUniform("Texture0"));
+            //     glUniformMatrix4fv(texProg->getUniform("M"), 1, GL_FALSE, value_ptr(Model->topMatrix()));
+            //     for (int i=0; i < statueMesh.size(); i++) {
+            //         statueMesh2[i]->draw(texProg);
+            //     }
+            // Model->popMatrix();
+
+            // drawHouse(Model, texProg);
+            // drawLamps(Model, texProg);
+            // drawRoad(Model, texProg);
+
+            // hedge->bind(texProg->getUniform("Texture0"));
+            // for (int i=0; i < 31; i++) {
+            //     for (int j=0; j < 31; j++) {
+            //         if (occupancy[i][j] == 1) {
+            //             vec3 tmp = mapSpaces(i, j);
+            //             Model->pushMatrix();
+            //             Model->translate(vec3(tmp.x, 0, tmp.z));
+            //             Model->scale(vec3(2, 2, 2));
+            //             glUniformMatrix4fv(texProg->getUniform("M"), 1, GL_FALSE, value_ptr(Model->topMatrix()));
+            //             cubeTex->draw(texProg);
+            //             Model->popMatrix();
+            //         }
+            //     }
+            // }
+
+            for (unsigned int j=0; j < 3; j++) {
+                Model->pushMatrix();
+                    Model->translate(vec3(axe_x[j], 0, axe_z[j]));
+                    Model->rotate(-PI/4.0, vec3(0, 0, 1));
+                    Model->scale(vec3(axe_scale[j]));
+                    axeTex->bind(texProg->getUniform("Texture0"));
+                    setModel(texProg, Model);
+                    for (int i=0; i < axeMesh.size(); i++) {   
+                        axeMesh[i]->draw(texProg);
+                    }
+                Model->popMatrix();
             }
-        Model->popMatrix();
 
-        Model->pushMatrix();
-            Model->translate(vec3(17.5, -1.25, 31.25));
-            Model->rotate(-PI/2, vec3(0, 1, 0));
-            Model->scale(vec3(0.0125, 0.0125, 0.0125));
-            statueTex2->bind(texProg->getUniform("Texture0"));
-            glUniformMatrix4fv(texProg->getUniform("M"), 1, GL_FALSE, value_ptr(Model->topMatrix()));
-            for (int i=0; i < statueMesh.size(); i++) {
-                statueMesh2[i]->draw(texProg);
-            }
-        Model->popMatrix();
-
-        // for (int i=0; i < 31; i++) {
-        //     for (int j=0; j < 31; j++) {
-        //         if (occupancy[i][j] == 1) {
-        //             vec3 tmp = mapSpaces(i, j);
-        //             drawTree(Model, texProg, tmp.x, tmp.z);
-        //         }
-        //     }
-        // }
-
-        // drawHouse(Model, texProg);
-        // drawTree(Model, texProg, 5, -4);
-        // drawTree(Model, texProg, -5, -4);
-        // vector<vector<float>> pos = {
-        //     {10, 1}, {9, 7}, {8, 10}, {8, -12}, {11, -4}, {6, 2}, {14, 4}, {10, -8}, {5, 12},
-        //     {-12, 4}, {-10, -6}, {-8, 10}, {-6, -1}, {-5, 4}, {-9, 0}, {-14, 9}, {-6, 12}
-        // };
-        // for (int i=0; i < pos.size(); i++) {
-        //     drawTree(Model, texProg, pos[i][0], pos[i][1]);
-        // }
-        // drawLamps(Model, texProg);
-        // drawRoad(Model, texProg);
-
-        hedge->bind(texProg->getUniform("Texture0"));
-        for (int i=0; i < 31; i++) {
-            for (int j=0; j < 31; j++) {
-                if (occupancy[i][j] == 1) {
-                    vec3 tmp = mapSpaces(i, j);
-                    Model->pushMatrix();
-                    Model->translate(vec3(tmp.x, 0, tmp.z));
-                    Model->scale(vec3(2, 2, 2));
-                    glUniformMatrix4fv(texProg->getUniform("M"), 1, GL_FALSE, value_ptr(Model->topMatrix()));
-                    cubeTex->draw(texProg);
-                    Model->popMatrix();
-                }
-            }
-        }
-
-        glUniform1i(texProg->getUniform("flip"), 1);
-		drawGround(texProg);
+            glUniform1i(texProg->getUniform("flip"), 1);
+            drawGround(texProg);
 
 		texProg->unbind();
 
+        progInst->bind();
+            glUniformMatrix4fv(progInst->getUniform("P"), 1, GL_FALSE, value_ptr(Projection->topMatrix()));
+            SetView(progInst);
+            glUniform3f(progInst->getUniform("lightPos"), g_eye.x-0.5, g_eye.y, g_eye.z-0.5);
+            for (int i=0; i < cubeInst.size(); i++) {   
+                int mat = cubeInst[i]->getMat()[0];
+                SetGenericMat(progInst, treeMat[mat].ambient, treeMat[mat].diffuse, treeMat[mat].specular, treeMat[mat].shininess, "tree");
+                if (treeMat[mat].diffuse_texname != "") {
+                    textureMap.at(treeMat[mat].diffuse_texname)->bind(progInst->getUniform("Texture0"));
+                }
+                // if (i==0) {
+                //     firTrunk->bind(progInst->getUniform("Texture0"));
+                // } else {
+                //     firLeaf->bind(progInst->getUniform("Texture0"));
+                // }
+                cubeInst[i]->draw(progInst);
+            }
+		progInst->unbind();
+
         //to draw the sky box bind the right shader
         cubeProg->bind();
-        //set the projection matrix - can use the same one
-        glUniformMatrix4fv(cubeProg->getUniform("P"), 1, GL_FALSE, value_ptr(Projection->topMatrix()));
-        //set the depth function to always draw the box!
-        glDepthFunc(GL_LEQUAL);
-        //set up view matrix to include your view transforms
-        //(your code likely will be different depending
-        SetView(cubeProg);
-        //set and send model transforms - likely want a bigger cube
-        Model->pushMatrix();
-        Model->rotate(3.1416, vec3(0, 1, 0));
-        Model->scale(vec3(70, 70, 70));
-        glUniformMatrix4fv(cubeProg->getUniform("M"), 1, GL_FALSE,value_ptr(Model->topMatrix()));
-        Model->popMatrix();
-        //bind the cube map texture
-        glBindTexture(GL_TEXTURE_CUBE_MAP, cubeMapTexture);
+            //set the projection matrix - can use the same one
+            glUniformMatrix4fv(cubeProg->getUniform("P"), 1, GL_FALSE, value_ptr(Projection->topMatrix()));
+            //set the depth function to always draw the box!
+            glDepthFunc(GL_LEQUAL);
+            //set up view matrix to include your view transforms
+            //(your code likely will be different depending
+            SetView(cubeProg);
+            //set and send model transforms - likely want a bigger cube
+            Model->pushMatrix();
+            Model->translate(vec3(0, 0, 0));
+            Model->rotate(3.1416, vec3(0, 1, 0));
+            Model->scale(vec3(70, 70, 70));
+            glUniformMatrix4fv(cubeProg->getUniform("M"), 1, GL_FALSE,value_ptr(Model->topMatrix()));
+            Model->popMatrix();
+            //bind the cube map texture
+            glBindTexture(GL_TEXTURE_CUBE_MAP, cubeMapTexture);
 
-        //draw the actual cube
-        cube->draw(cubeProg);
+            //draw the actual cube
+            cube->draw(cubeProg);
 
-        //set the depth test back to normal!
-        glDepthFunc(GL_LESS);
-        //unbind the shader for the skybox
+            //set the depth test back to normal!
+            glDepthFunc(GL_LESS);
+            //unbind the shader for the skybox
         cubeProg->unbind(); 
 
         prog->bind();
-        glUniformMatrix4fv(prog->getUniform("P"), 1, GL_FALSE, value_ptr(Projection->topMatrix()));
-        glUniform3f(prog->getUniform("lightPos"), g_eye.x-0.5, g_eye.y, g_eye.z-0.5);
-		SetView(prog);
-        //drawWalls(prog);
-        //Model->scale(vec3(2, 2, 2));
-        //glUniformMatrix4fv(prog->getUniform("M"), 1, GL_FALSE,value_ptr(Model->topMatrix()));
-        //cube->draw(prog, "instance");
-        SetMaterial(prog, 2);
-        drawDummy(Model, prog);
+            glUniformMatrix4fv(prog->getUniform("P"), 1, GL_FALSE, value_ptr(Projection->topMatrix()));
+            glUniform3f(prog->getUniform("lightPos"), g_eye.x-0.5, g_eye.y, g_eye.z-0.5);
+            SetView(prog);
+            SetMaterial(prog, 2);
+            drawDummy(Model, prog, frametime);
         prog->unbind();
-
-		//use the material shader
-		// prog->bind();
-		// //set up all the matrices
-		// glUniformMatrix4fv(prog->getUniform("P"), 1, GL_FALSE, value_ptr(Projection->topMatrix()));
-		// SetView(prog);
-		// glUniform3f(prog->getUniform("lightPos"), 3.0+lightTrans, 8.0, 7);
-        // drawCar(Model, prog);
-		// prog->unbind();
 
 		// Pop matrix stacks.
 		Projection->popMatrix();
@@ -1353,10 +1525,10 @@ int main(int argc, char *argv[])
 	// This is the code that will likely change program to program as you
 	// may need to initialize or set up different data and state
 
+    application->readMaze(resourceDir);
+
 	application->init(resourceDir);
 	application->initGeom(resourceDir);
-
-    application->readMaze(resourceDir);
 
 	auto lastTime = chrono::high_resolution_clock::now();
 	// Loop until the user closes the window.
