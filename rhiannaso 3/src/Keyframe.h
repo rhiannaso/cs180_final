@@ -1,5 +1,6 @@
 
-#pragma once
+#ifndef KEYFRAME_H
+#define KEYFRAME_H
 
 #include <string>
 #include <vector>
@@ -16,17 +17,16 @@ public:
 	virtual ~Keyframe();
     float returnStart() { return startAngle; }
     float returnEnd() { return endAngle; }
-    void setTimeSince(float t) { startTime = t; }
-    void resetCurrTime() { currTime = 0; }
-    float interpolate();
-    void update(float deltaTime);
-    bool isDone();
+    float interpolate(float currTime);
+    void setStart(float t) { startTime = t; }
+    bool isDone() { return done; }
 
 private:
     float startAngle;
     float endAngle;
     float duration; // duration of keyframe animation
     float startTime;
-    float currTime = 0;
-    bool done = false;
+    float done;
 };
+
+#endif // KEYFRAME_H

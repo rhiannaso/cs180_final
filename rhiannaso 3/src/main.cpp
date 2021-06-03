@@ -81,18 +81,20 @@ public:
     float driveTheta = 0;
     int frame = 0;
     bool newFrame = true;
-    vector<float> lArmKF{0, PI/10.0, PI/8.0, 0, -PI/10.0, -PI/8.0};
-    vector<float> rArmKF{0, PI/10.0, PI/8.0, 0, -PI/10.0, -PI/8.0};
-    vector<float> lLegKF{PI/8.0, PI/10.0, 0, -PI/8.0, -PI/10.0, 0};
-    vector<float> lKneeKF{0, PI/4.0, PI/3.0, 0, 0, 0};
-    vector<float> rLegKF{-PI/8.0, -PI/10.0, 0, PI/8.0, PI/10.0, 0};
-    vector<float> rKneeKF{0, 0, 0, 0, PI/4.0, PI/3.0};
-    // vector<Keyframe> lArmKF;
-    // vector<Keyframe> rArmKF;
-    // vector<Keyframe> lLegKF;
-    // vector<Keyframe> lKneeKF;
-    // vector<Keyframe> rLegKF;
-    // vector<Keyframe> rKneeKF;
+    float frameDur = 2;
+    float startTime;
+    // vector<float> lArmKF{0, PI/10.0, PI/8.0, 0, -PI/10.0, -PI/8.0};
+    // vector<float> rArmKF{0, PI/10.0, PI/8.0, 0, -PI/10.0, -PI/8.0};
+    // vector<float> lLegKF{PI/8.0, PI/10.0, 0, -PI/8.0, -PI/10.0, 0};
+    // vector<float> lKneeKF{0, PI/4.0, PI/3.0, 0, 0, 0};
+    // vector<float> rLegKF{-PI/8.0, -PI/10.0, 0, PI/8.0, PI/10.0, 0};
+    // vector<float> rKneeKF{0, 0, 0, 0, PI/4.0, PI/3.0};
+    vector<Keyframe> lArmKF;
+    vector<Keyframe> rArmKF;
+    vector<Keyframe> lLegKF;
+    vector<Keyframe> lKneeKF;
+    vector<Keyframe> rLegKF;
+    vector<Keyframe> rKneeKF;
 
     //skybox data
     vector<std::string> faces {
@@ -152,8 +154,8 @@ public:
 	double g_phi, g_theta;
 	vec3 view = vec3(0, 0, 1);
 	vec3 strafe = vec3(1, 0, 0);
-	//vec3 g_eye = vec3(16, 0, 33);
-    vec3 g_eye = vec3(mapSpaces(11, 15).x, 0, mapSpaces(11, 15).z);
+	vec3 g_eye = vec3(16, 0, 33);
+    // vec3 g_eye = vec3(mapSpaces(11, 15).x, 0, mapSpaces(11, 15).z);
     // vec3 g_eye = vec3(0, 60, 10);
     // vec3 g_lookAt = vec3(0, 0, 0);
 	vec3 g_lookAt = vec3(16, 0, 30);
@@ -610,39 +612,40 @@ public:
     }
 
     void initKeyframes() {
-        // vector<float> arms{0, PI/8.0, 0, -PI/8.0};
-        // for (int i=0; i < arms.size(); i++) {
-        //     if (i != arms.size()-1) {
-        //         Keyframe tmp = Keyframe(arms[i], arms[i+1], 1);
-        //         lArmKF.push_back(tmp);
-        //         rArmKF.push_back(tmp);
-        //     }
-        // }
-        // vector<float> legs{PI/6.0, 0, -PI/6.0, 0};
-        // for (int i=0; i < legs.size(); i++) {
-        //     if (i != legs.size()-1) {
-        //         Keyframe tmp = Keyframe(legs[i], legs[i+1], 1);
-        //         lLegKF.push_back(tmp);
-        //     }
-        //     if (i != legs.size()-1) {
-        //         Keyframe tmp = Keyframe(-1*legs[i], -1*legs[i+1], 1);
-        //         rLegKF.push_back(tmp);
-        //     }
-        // }
-        // vector<float> lKnee{0, PI/3.0, 0, 0};
-        // for (int i=0; i < lKnee.size(); i++) {
-        //     if (i != lKnee.size()-1) {
-        //         Keyframe tmp = Keyframe(lKnee[i], lKnee[i+1], 1);
-        //         lKneeKF.push_back(tmp);
-        //     }
-        // }
-        // vector<float> rKnee{0, 0, 0, PI/3.0};
-        // for (int i=0; i < rKnee.size(); i++) {
-        //     if (i != rKnee.size()-1) {
-        //         Keyframe tmp = Keyframe(rKnee[i], rKnee[i+1], 1);
-        //         rKneeKF.push_back(tmp);
-        //     }
-        // }
+        vector<float> arms{0, PI/8.0, 0, -PI/8.0};
+        for (int i=0; i < arms.size(); i++) {
+            Keyframe tmp = Keyframe(arms[i], arms[i+1], frameDur);
+            if (i == arms.size()-1)
+               tmp = Keyframe(arms[i], arms[0], frameDur);
+            lArmKF.push_back(tmp);
+            rArmKF.push_back(tmp);
+        }
+        vector<float> legs{PI/6.0, 0, -PI/6.0, 0};
+        for (int i=0; i < legs.size(); i++) {
+            Keyframe tmp = Keyframe(legs[i], legs[i+1], frameDur);
+            if (i == legs.size()-1)
+                tmp = Keyframe(legs[i], legs[0], frameDur);
+            lLegKF.push_back(tmp);
+
+            Keyframe tmp2 = Keyframe(-1*legs[i], -1*legs[i+1], frameDur);
+            if (i == legs.size()-1)
+                tmp2 = Keyframe(-1*legs[i], -1*legs[0], frameDur);
+            rLegKF.push_back(tmp2);
+        }
+        vector<float> lKnee{0, PI/3.0, 0, 0};
+        for (int i=0; i < lKnee.size(); i++) {
+            Keyframe tmp = Keyframe(lKnee[i], lKnee[i+1], frameDur);
+            if (i == lKnee.size()-1)
+                tmp = Keyframe(lKnee[i], lKnee[0], frameDur);
+            lKneeKF.push_back(tmp);
+        }
+        vector<float> rKnee{0, 0, 0, PI/3.0};
+        for (int i=0; i < rKnee.size(); i++) {
+            Keyframe tmp = Keyframe(rKnee[i], rKnee[i+1], frameDur);
+            if (i == rKnee.size()-1)
+                tmp = Keyframe(rKnee[i], rKnee[0], frameDur);
+            rKneeKF.push_back(tmp);
+        }
     }
 
 	void initGeom(const std::string& resourceDirectory)
@@ -832,7 +835,7 @@ public:
 		//code to load in the ground plane (CPU defined data passed to GPU)
 		initGround();
 
-        //initKeyframes();
+        initKeyframes();
 	}
 
 	//directly pass quad for the ground to the GPU
@@ -1066,25 +1069,38 @@ public:
         return vec3(x, y, z);
     }
 
-    void handleInterpolation(Keyframe k, float frametime, shared_ptr<MatrixStack> Model, vec3 axis) { // return index of keyframe to trigger
+    void handleInterpolation(Keyframe &k, float frametime, shared_ptr<MatrixStack> Model, vec3 axis, string limb) {
+        // if (newFrame) {
+        //     newFrame = false;
+        //     k->setStart(glfwGetTime());
+        //     cout << limb << endl;
+        //     cout << "START: " << glfwGetTime() << endl;
+        // }
+        // float angle = k->interpolate(glfwGetTime());
+        // if (angle != RAND_MAX) {
+        //     Model->rotate(angle, axis);
+        // } else {
+        //     frame = (++frame)%4;
+        //     newFrame = true;
+        // }
         if (newFrame) {
-            k.setTimeSince(glfwGetTime());
             newFrame = false;
+            k.setStart(glfwGetTime());
+            cout << limb << endl;
+            cout << "START: " << glfwGetTime() << endl;
         }
+        float angle = k.interpolate(glfwGetTime());
         if(!k.isDone()){
-       		k.update(frametime);
-            float angle = k.interpolate();
             Model->rotate(angle, axis);
         } else {
             frame = (++frame)%4;
-            k.resetCurrTime();
             newFrame = true;
         }
     }
 
     void drawDummy(shared_ptr<MatrixStack> Model, shared_ptr<Program> prog, float frametime) {
         vec3 tmp;
-        int frame = (int)(glfwGetTime()*5)%6;
+        //int frame = (int)(glfwGetTime()*5)%6;
         Model->pushMatrix();
             Model->translate(vec3(dummyLoc.x, dummyLoc.y, dummyLoc.z));
             //Model->translate(vec3((g_eye.x+(speed*view.x)), -1.25, (g_eye.z+(speed*view.z))));
@@ -1105,8 +1121,8 @@ public:
                 Model->translate(vec3(1.0f*dummyMesh[21]->min.x, 1.0f*dummyMesh[21]->min.y, 1.0f*dummyMesh[21]->max.z));
                 Model->rotate(-PI/2.4, vec3(1, 0, 0));
                 // Model->rotate(-PI/8.0, vec3(0, 0, 1));
-                Model->rotate(lArmKF[frame], vec3(0, 0, 1));
-                //handleInterpolation(lArmKF[frame], frametime, Model, vec3(0, 0, 1));
+                // Model->rotate(lArmKF[frame], vec3(0, 0, 1));
+                handleInterpolation(lArmKF[frame], frametime, Model, vec3(0, 0, 1), "Left arm");
                 Model->translate(vec3(-1.0f*dummyMesh[21]->min.x, -1.0f*dummyMesh[21]->min.y, -1.0f*dummyMesh[21]->max.z));
                 setModel(prog, Model);
                 for (int i=21; i <=26; i++) {
@@ -1121,8 +1137,8 @@ public:
                 Model->translate(vec3(1.0f*dummyMesh[15]->max.x, 1.0f*dummyMesh[15]->max.y, 1.0f*dummyMesh[15]->max.z));
                 Model->rotate(PI/2.4, vec3(1, 0, 0));
                 //Model->rotate(-PI/8.0, vec3(0, 0, 1));
-                // handleInterpolation(rArmKF[frame], frametime, Model, vec3(0, 0, 1));
-                Model->rotate(rArmKF[frame], vec3(0, 0, 1));
+                handleInterpolation(rArmKF[frame], frametime, Model, vec3(0, 0, 1), "Right arm");
+                // Model->rotate(rArmKF[frame], vec3(0, 0, 1));
                 Model->translate(vec3(-1.0f*dummyMesh[15]->max.x, -1.0f*dummyMesh[15]->max.y, -1.0f*dummyMesh[15]->max.z));
                 setModel(prog, Model);
                 for (int i=15; i <=20; i++) {
@@ -1133,9 +1149,8 @@ public:
             //  KEYFRAMES: PI/6.0 (leg backward), none (but knee bent), -PI/10.0, -PI/6.0, none,
             Model->pushMatrix();
                 Model->translate(vec3(1.0f*dummyMesh[11]->min.x, 1.0f*dummyMesh[11]->min.y, 1.0f*dummyMesh[11]->max.z));
-                //Model->rotate(-PI/6.0, vec3(0, 1, 0));
-                Model->rotate(lLegKF[frame], vec3(0, 1, 0));
-                // handleInterpolation(lLegKF[frame], frametime, Model, vec3(0, 1, 0));
+                // Model->rotate(lLegKF[frame], vec3(0, 1, 0));
+                handleInterpolation(lLegKF[frame], frametime, Model, vec3(0, 1, 0), "Left leg");
                 Model->translate(vec3(-1.0f*dummyMesh[11]->min.x, -1.0f*dummyMesh[11]->min.y, -1.0f*dummyMesh[11]->max.z));
                 setModel(prog, Model);
                 dummyMesh[11]->draw(prog); // pelvis
@@ -1143,9 +1158,8 @@ public:
 
                 // KEYFRAMES: none, PI/3.0, PI/4.0, none, none, 
                 Model->translate(vec3(1.0f*dummyMesh[9]->max.x, 1.0f*dummyMesh[9]->min.y, 1.0f*dummyMesh[9]->max.z));
-                //Model->rotate(PI/3.0, vec3(0, 1, 0));
-                Model->rotate(lKneeKF[frame], vec3(0, 1, 0));
-                // handleInterpolation(lKneeKF[frame], frametime, Model, vec3(0, 1, 0));
+                // Model->rotate(lKneeKF[frame], vec3(0, 1, 0));
+                handleInterpolation(lKneeKF[frame], frametime, Model, vec3(0, 1, 0), "Left knee");
                 Model->translate(vec3(-1.0f*dummyMesh[9]->max.x, -1.0f*dummyMesh[9]->min.y, -1.0f*dummyMesh[9]->max.z));
                 setModel(prog, Model);
                 for (int i=6; i <=9; i++) {
@@ -1157,9 +1171,8 @@ public:
             Model->pushMatrix();
                 tmp = findCenter(5);
                 Model->translate(vec3(1.0f*dummyMesh[5]->max.x, 1.0f*dummyMesh[5]->max.y, 1.0f*dummyMesh[5]->max.z));
-                //Model->rotate(PI/6.0, vec3(0, 1, 0));
-                Model->rotate(rLegKF[frame], vec3(0, 1, 0));
-                // handleInterpolation(rLegKF[frame], frametime, Model, vec3(0, 1, 0));
+                // Model->rotate(rLegKF[frame], vec3(0, 1, 0));
+                handleInterpolation(rLegKF[frame], frametime, Model, vec3(0, 1, 0), "Right leg");
                 Model->translate(vec3(-1.0f*dummyMesh[5]->max.x, -1.0f*dummyMesh[5]->max.y, -1.0f*dummyMesh[5]->max.z));
                 setModel(prog, Model);
                 dummyMesh[5]->draw(prog); // pelvis
@@ -1167,9 +1180,8 @@ public:
 
                 // KEYFRAMES: none, none, none, none, PI/3.0
                 Model->translate(vec3(1.0f*dummyMesh[9]->max.x, 1.0f*dummyMesh[9]->min.y, 1.0f*dummyMesh[9]->max.z));
-                //Model->rotate(PI/3.0, vec3(0, 1, 0));
-                Model->rotate(rKneeKF[frame], vec3(0, 1, 0));
-                // handleInterpolation(rKneeKF[frame], frametime, Model, vec3(0, 1, 0));
+                // Model->rotate(rKneeKF[frame], vec3(0, 1, 0));
+                handleInterpolation(rKneeKF[frame], frametime, Model, vec3(0, 1, 0), "Right knee");
                 Model->translate(vec3(-1.0f*dummyMesh[9]->max.x, -1.0f*dummyMesh[9]->min.y, -1.0f*dummyMesh[9]->max.z));
                 setModel(prog, Model);
                 for (int i=0; i <=3; i++) {
