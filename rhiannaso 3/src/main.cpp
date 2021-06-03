@@ -148,21 +148,20 @@ public:
     glm::mat4 *modelMatrices;
     int numWalls = 0;
 
-    bool setLaunch = true;
-
 	//camera
 	double g_phi, g_theta;
     vec3 dummyLoc = vec3(16, -1.25, 30);
+    // vec3 dummyLoc = vec3(mapSpaces(27, 17).x, -1.25, mapSpaces(27, 17).z);
     float dummyRot = PI/2.0;
 	vec3 view = vec3(0, 0, 1);
 	vec3 strafe = vec3(1, 0, 0);
     // vec3 g_eye = vec3(mapSpaces(11, 15).x, 0, mapSpaces(11, 15).z);
-    // vec3 g_eye = vec3(0, 60, 10);
-    // vec3 g_lookAt = vec3(0, 0, 0);
+    // vec3 g_eye = vec3(0, 0, 0);
+    // vec3 g_lookAt = vec3(0, 60, 10);
     float speed = 0.3;
     float camY = 1.75;
     float camZ = 2;
-    vec3 g_eye = vec3(16, 0.5, 32); // 16, 0, 33
+    vec3 g_eye = vec3(dummyLoc.x, dummyLoc.y+camY, dummyLoc.z+camZ); // 16, 0, 33
     vec3 g_lookAt = vec3(dummyLoc.x, dummyLoc.y+camY, dummyLoc.z); // 16, 0, 30
 
     // Chopping actions
@@ -192,9 +191,11 @@ public:
 			glPolygonMode( GL_FRONT_AND_BACK, GL_LINE );
 		}
         if (key == GLFW_KEY_T && action == GLFW_PRESS) { // Chopping down trees
-            vec2 tmp = findMySpace(g_eye); // TODO: change to dummyLoc
+            //vec2 tmp = findMySpace(g_eye); // TODO: change to dummyLoc
+            vec2 tmp = findMySpace(dummyLoc);
             if (hasAxe > 0 && firstAct) {
-                vec2 chopLoc = findMySpace(g_lookAt); // TODO: figure out what to change to (maybe dummyLoc + 1 in whatever direction it's facing)
+                //vec2 chopLoc = findMySpace(g_lookAt); // TODO: figure out what to change to (maybe dummyLoc + 1 in whatever direction it's facing)
+                vec2 chopLoc = findMySpace(g_lookAt);
                 float i = chopLoc.x;
                 float j = chopLoc.y;
                 vec3 view = g_eye-g_lookAt;
@@ -586,10 +587,6 @@ public:
 		progInst->init();
 		progInst->addUniform("P");
 		progInst->addUniform("V");
-        // progInst->addUniform("flip");
-        // progInst->addUniform("MatAmb");
-		// progInst->addUniform("MatDif");
-		// progInst->addUniform("MatSpec");
         progInst->addUniform("Texture0");
 		progInst->addUniform("MatShine");
         progInst->addUniform("lightPos");
@@ -668,10 +665,6 @@ public:
 
 	void initGeom(const std::string& resourceDirectory)
 	{
-		//EXAMPLE set up to read one shape from one obj file - convert to read several
-		// Initialize mesh
-		// Load geometry
- 		// Some obj files contain material information.We'll ignore them for this assignment.
  		vector<tinyobj::shape_t> TOshapes;
  		vector<tinyobj::material_t> objMaterials;
  		string errStr;
@@ -686,21 +679,7 @@ public:
 			sphere->init();
 		}
 
-		rc = tinyobj::LoadObj(TOshapes, objMaterials, errStr, (resourceDirectory + "/statue/Venus_de_Milo.obj").c_str());
-		if (!rc) {
-			cerr << errStr << endl;
-		} else {
-			for (int i = 0; i < TOshapes.size(); i++) {
-                shared_ptr<Shape> tmp = make_shared<Shape>();
-                tmp->createShape(TOshapes[i]);
-                tmp->measure();
-                tmp->init();
-
-                statueMesh.push_back(tmp);
-            }
-		}
-
-        rc = tinyobj::LoadObj(TOshapes, objMaterials, errStr, (resourceDirectory + "/statue2/mm_artdeco_sculpture_01.obj").c_str());
+		rc = tinyobj::LoadObj(TOshapes, objMaterials, errStr, (resourceDirectory + "/statue2/mm_artdeco_sculpture_01.obj").c_str());
 		if (!rc) {
 			cerr << errStr << endl;
 		} else {
@@ -800,20 +779,6 @@ public:
             }
 		}
 
-        rc = tinyobj::LoadObj(TOshapes, carMat, errStr, (resourceDirectory + "/car/car.obj").c_str(), (resourceDirectory + "/car/").c_str());
-        if (!rc) {
-			cerr << errStr << endl;
-		} else {
-            for (int i = 0; i < TOshapes.size(); i++) {
-                shared_ptr<Shape> tmp = make_shared<Shape>();
-                tmp->createShape(TOshapes[i]);
-                tmp->measure();
-                tmp->init();
-                
-                carMesh.push_back(tmp);
-            }
-		}
-
         rc = tinyobj::LoadObj(TOshapes, houseMat, errStr, (resourceDirectory + "/brickHouse/CH_building1.obj").c_str(), (resourceDirectory + "/brickHouse/").c_str());
         if (!rc) {
 			cerr << errStr << endl;
@@ -836,16 +801,6 @@ public:
             lampMesh->createShape(TOshapes[0]);
             lampMesh->measure();
             lampMesh->init();
-		}
-
-        rc = tinyobj::LoadObj(TOshapes, objMaterials, errStr, (resourceDirectory + "/road.obj").c_str());
-        if (!rc) {
-			cerr << errStr << endl;
-		} else {
-			roadObj = make_shared<Shape>();
-			roadObj->createShape(TOshapes[0]);
-			roadObj->measure();
-			roadObj->init();
 		}
 
         cubeMapTexture = createSky("../resources/sky/", faces);
@@ -997,18 +952,6 @@ public:
   		glm::mat4 Cam = glm::lookAt(g_eye, g_lookAt, vec3(0, 1, 0));
   		glUniformMatrix4fv(shader->getUniform("V"), 1, GL_FALSE, value_ptr(Cam));
 	}
-
-   	/* code to draw waving hierarchical model */
-   	void drawHierModel(shared_ptr<MatrixStack> Model, shared_ptr<Program> prog) {
-   		// simplified for releaes code
-		Model->pushMatrix();
-			Model->loadIdentity();
-			Model->translate(vec3(0, 0, -6));
-			Model->scale(vec3(2.3));
-			setModel(prog, Model);
-			sphere->draw(prog);
-		Model->popMatrix();
-   	}
 
     void drawHouse(shared_ptr<MatrixStack> Model, shared_ptr<Program> drawProg) {
         Model->pushMatrix();
@@ -1208,116 +1151,6 @@ public:
                 }
             Model->popMatrix();
         Model->popMatrix();
-        // vec3 tmp;
-        // Model->pushMatrix();
-        //     Model->loadIdentity();
-        //     Model->translate(vec3(16, -1.25, 30));
-        //     Model->rotate(-1.5708, vec3(1, 0, 0));
-        //     Model->rotate(-1.5708, vec3(0, 0, 1));
-        //     // HIPS
-        //     Model->pushMatrix();
-        //         Model->scale(vec3(0.01, 0.01, 0.01));
-        //         setModel(prog, Model);
-        //         dummyMesh[12]->draw(prog); // hips
-        //     Model->popMatrix();
-        //     // UPPER BODY
-        //     Model->pushMatrix();
-        //         Model->scale(vec3(0.01, 0.01, 0.01));
-        //         setModel(prog, Model);
-        //         dummyMesh[28]->draw(prog); // head
-        //         dummyMesh[27]->draw(prog); // neck
-        //         dummyMesh[14]->draw(prog); // torso
-        //         dummyMesh[13]->draw(prog); // belly
-        //     Model->popMatrix();
-        //     // LEFT ARM
-        //     Model->pushMatrix();
-        //         //Model->rotate(-1.5708, vec3(1, 0, 0));
-        //         //Model->rotate(-1.5708, vec3(0, 0, 1));
-        //         Model->pushMatrix();
-        //             tmp = findCenter(16);
-        //             Model->translate(vec3(-tmp.x, -tmp.y, -tmp.z));
-        //             // Model->rotate(-1.5708, vec3(1, 0, 0));
-        //             // Model->translate(vec3((tmp.x), (tmp.y), (tmp.z)));
-        //             // dummyMesh[20]->draw(prog); // hand
-        //             // dummyMesh[19]->draw(prog); // wrist
-        //             // dummyMesh[18]->draw(prog); // forearm
-        //             // dummyMesh[17]->draw(prog); // elbow
-        //             Model->scale(vec3(0.01, 0.01, 0.01));
-        //             setModel(prog, Model);
-        //             dummyMesh[16]->draw(prog); // bicep
-        //         Model->popMatrix();
-
-        //         Model->scale(vec3(0.01, 0.01, 0.01));
-        //         setModel(prog, Model);
-        //         dummyMesh[15]->draw(prog); // shoulder
-        //     Model->popMatrix();
-        //     // RIGHT ARM
-        //     Model->pushMatrix();
-        //         Model->scale(vec3(0.01, 0.01, 0.01));
-        //         setModel(prog, Model);
-        //         dummyMesh[26]->draw(prog); // hand
-        //         dummyMesh[25]->draw(prog); // wrist
-        //         dummyMesh[24]->draw(prog); // forearm
-        //         dummyMesh[23]->draw(prog); // elbow
-        //         dummyMesh[22]->draw(prog); // bicep
-        //         dummyMesh[21]->draw(prog); // shoulder
-        //     Model->popMatrix();
-        //     // LEFT LEG
-        //     Model->pushMatrix();
-        //         Model->scale(vec3(0.01, 0.01, 0.01));
-        //         setModel(prog, Model);
-        //         dummyMesh[6]->draw(prog); // foot
-        //         dummyMesh[7]->draw(prog); // ankle
-        //         dummyMesh[8]->draw(prog); // lower leg
-        //         dummyMesh[9]->draw(prog); // knee
-        //         dummyMesh[10]->draw(prog); // upper leg
-        //         dummyMesh[11]->draw(prog); // pelvis
-        //     Model->popMatrix();
-        //     // RIGHT LEG
-        //     Model->pushMatrix();
-        //         Model->scale(vec3(0.01, 0.01, 0.01));
-        //         setModel(prog, Model);
-        //         dummyMesh[0]->draw(prog); // foot
-        //         dummyMesh[1]->draw(prog); // ankle
-        //         dummyMesh[2]->draw(prog); // lower leg
-        //         dummyMesh[3]->draw(prog); // knee
-        //         dummyMesh[4]->draw(prog); // upper leg
-        //         dummyMesh[5]->draw(prog); // pelvis
-        //     Model->popMatrix();
-        // Model->popMatrix();
-    }
-
-    void drawCar(shared_ptr<MatrixStack> Model, shared_ptr<Program> prog) {
-        driveTheta = 1.5*sin(glfwGetTime());
-
-        Model->pushMatrix();
-            Model->translate(vec3(2.7, -0.85, 2));
-            Model->translate(vec3(0, 0, driveTheta));
-            Model->scale(vec3(0.3, 0.3, 0.3));
-
-            setModel(prog, Model);
-            float diffuse[3] = {0.840000, 0.332781, 0.311726};
-            for (int i=0; i < carMesh.size(); i++) {
-                int mat = carMesh[i]->getMat()[0];
-                SetGenericMat(prog, carMat[mat].ambient, carMat[mat].diffuse, carMat[mat].specular, carMat[mat].shininess, "car");
-                carMesh[i]->draw(prog);
-            }
-        Model->popMatrix();
-    }
-
-    void drawRoad(shared_ptr<MatrixStack> Model, shared_ptr<Program> prog) {
-        Model->pushMatrix();
-            Model->pushMatrix();
-                Model->translate(vec3(0, -1.24, 5));
-                Model->rotate(3.1416, vec3(0, 0, 1));
-                Model->scale(vec3(1.9, 0.1, 3));
-
-                glUniform1i(prog->getUniform("flip"), 0);
-                road->bind(prog->getUniform("Texture0"));
-                setModel(prog, Model);
-                roadObj->draw(prog);
-            Model->popMatrix();
-        Model->popMatrix();
     }
 
    	void updateUsingCameraPath(float frametime)  {
@@ -1357,19 +1190,6 @@ public:
         }
     }
 
-    void launchOverview(float frametime) {
-        splinepath[0] = Spline(glm::vec3(-20,12,-20), glm::vec3(-10,10,-10), glm::vec3(0, 8, 0), glm::vec3(10,6,10), 5);
-        splinepath[1] = Spline(glm::vec3(10,6,10), glm::vec3(20,4,20), glm::vec3(25, 2, 30), glm::vec3(16,0,33), 5);
-        g_lookAt = vec3(16, 0, 30);
-        if(!splinepath[0].isDone()){
-       		splinepath[0].update(frametime);
-            g_eye = splinepath[0].getPosition();
-        } else {
-            splinepath[1].update(frametime);
-            g_eye = splinepath[1].getPosition();
-        }
-    }
-
 	void render(float frametime) {
 		// Get current frame buffer size.
 		int width, height;
@@ -1388,10 +1208,6 @@ public:
 
 		//update the camera position
 		updateUsingCameraPath(frametime);
-        // if (setLaunch) {
-        //     launchOverview(frametime);
-        //     setLaunch = false;
-        // }
 
 		// Apply perspective projection.
 		Projection->pushMatrix();
@@ -1403,16 +1219,6 @@ public:
             // glUniform3f(texProg->getUniform("lightPos"), 3.0+lightTrans, 8.0, 7);
             glUniform3f(texProg->getUniform("lightPos"), g_eye.x-0.5, g_eye.y, g_eye.z-0.5);
             glUniform1i(texProg->getUniform("flip"), 1);
-
-            // Model->pushMatrix();
-            //     Model->translate(vec3(15, -1.25, 31));
-            //     Model->scale(vec3(0.5, 0.5, 0.5));
-            //     statueTex->bind(texProg->getUniform("Texture0"));
-            //     glUniformMatrix4fv(texProg->getUniform("M"), 1, GL_FALSE, value_ptr(Model->topMatrix()));
-            //     for (int i=0; i < statueMesh.size(); i++) {
-            //         statueMesh[i]->draw(texProg);
-            //     }
-            // Model->popMatrix();
 
             // Model->pushMatrix();
             //     Model->translate(vec3(14.5, -1.25, 31.25));
@@ -1438,7 +1244,6 @@ public:
 
             // drawHouse(Model, texProg);
             // drawLamps(Model, texProg);
-            // drawRoad(Model, texProg);
 
             // hedge->bind(texProg->getUniform("Texture0"));
             // for (int i=0; i < 31; i++) {
@@ -1458,6 +1263,8 @@ public:
             for (unsigned int j=0; j < 3; j++) {
                 Model->pushMatrix();
                     Model->translate(vec3(axe_x[j], 0, axe_z[j]));
+                    if (j == 2)
+                        Model->rotate(PI/2.0, vec3(0, 1, 0));
                     Model->rotate(-PI/4.0, vec3(0, 0, 1));
                     Model->scale(vec3(axe_scale[j]));
                     axeTex->bind(texProg->getUniform("Texture0"));
@@ -1494,29 +1301,20 @@ public:
 
         //to draw the sky box bind the right shader
         cubeProg->bind();
-            //set the projection matrix - can use the same one
             glUniformMatrix4fv(cubeProg->getUniform("P"), 1, GL_FALSE, value_ptr(Projection->topMatrix()));
-            //set the depth function to always draw the box!
             glDepthFunc(GL_LEQUAL);
-            //set up view matrix to include your view transforms
-            //(your code likely will be different depending
             SetView(cubeProg);
-            //set and send model transforms - likely want a bigger cube
             Model->pushMatrix();
             Model->translate(vec3(0, 0, 0));
             Model->rotate(3.1416, vec3(0, 1, 0));
             Model->scale(vec3(70, 70, 70));
             glUniformMatrix4fv(cubeProg->getUniform("M"), 1, GL_FALSE,value_ptr(Model->topMatrix()));
             Model->popMatrix();
-            //bind the cube map texture
             glBindTexture(GL_TEXTURE_CUBE_MAP, cubeMapTexture);
 
-            //draw the actual cube
             cube->draw(cubeProg);
 
-            //set the depth test back to normal!
             glDepthFunc(GL_LESS);
-            //unbind the shader for the skybox
         cubeProg->unbind(); 
 
         prog->bind();
