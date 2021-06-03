@@ -25,6 +25,7 @@ void main()
     float dist = sqrt(pow((lightDir.x - EPos.x), 2) + pow((lightDir.y - EPos.y), 2) + pow((lightDir.z - EPos.z), 2));
     float denom = a + (b*dist) + (c*pow(dist, 2));
     float IL = dot(D, light)/denom;
+    //float IL = 1/denom;
 
 	float dC = max(0, dot(normal, light));
 	vec3 V = -1*EPos;

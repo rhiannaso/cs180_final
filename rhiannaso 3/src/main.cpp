@@ -150,8 +150,8 @@ public:
 
 	//camera
 	double g_phi, g_theta;
-    vec3 dummyLoc = vec3(16, -1.25, 30);
-    // vec3 dummyLoc = vec3(mapSpaces(27, 17).x, -1.25, mapSpaces(27, 17).z);
+    // vec3 dummyLoc = vec3(16, -1.25, 30);
+    vec3 dummyLoc = vec3(mapSpaces(0, 17).x, -1.25, mapSpaces(0, 17).z);
     float dummyRot = PI/2.0;
 	vec3 view = vec3(0, 0, 1);
 	vec3 strafe = vec3(1, 0, 0);
@@ -257,17 +257,21 @@ public:
 		}
         if (key == GLFW_KEY_W && action == GLFW_PRESS){
 			view = g_lookAt - g_eye;
-            if (!detectCollision(dummyLoc + (speed*view)) && !detectHeight(dummyLoc + (speed*view))) { // originally g_eye not dummyLoc
-                dummyLoc = dummyLoc + (speed*view);
-                g_eye = g_eye + (speed*view);
+            vec3 tmp = dummyLoc + (speed*view);
+            //if (!detectCollision(dummyLoc + (speed*view)) && !detectHeight(dummyLoc + (speed*view))) { // originally g_eye not dummyLoc
+            if (!detectCollision(tmp)) {
+                // dummyLoc = dummyLoc + (speed*view);
+                dummyLoc = vec3(tmp.x, -1.25, tmp.z);
+                // g_eye = g_eye + (speed*view);
                 g_lookAt = vec3(dummyLoc.x, dummyLoc.y+camY, dummyLoc.z);
+                computeLookAt();
                 // g_lookAt = g_lookAt + (speed*view);
             }
 		}
         if (key == GLFW_KEY_A && action == GLFW_PRESS){
             view = g_lookAt - g_eye;
             strafe = cross(view, vec3(0, 1, 0));
-            if (!detectCollision(dummyLoc - (speed*strafe)) && !detectHeight(dummyLoc - (speed*strafe))) {
+            if (!detectCollision(dummyLoc - (speed*strafe))) {
                 dummyLoc = dummyLoc - (speed*strafe);
                 g_eye = g_eye - (speed*strafe);
                 g_lookAt = vec3(dummyLoc.x, dummyLoc.y+camY, dummyLoc.z);
@@ -276,17 +280,21 @@ public:
 		}
         if (key == GLFW_KEY_S && action == GLFW_PRESS){
 			view = g_lookAt - g_eye;
-            if (!detectCollision(dummyLoc - (speed*view)) && !detectHeight(dummyLoc - (speed*view))) {
-                dummyLoc = dummyLoc - (speed*view);
-                g_eye = g_eye - (speed*view);
+            vec3 tmp = dummyLoc - (speed*view);
+            //if (!detectCollision(dummyLoc - (speed*view)) && !detectHeight(dummyLoc - (speed*view))) {
+            if (!detectCollision(tmp)) {
+                // dummyLoc = dummyLoc - (speed*view);
+                dummyLoc = vec3(tmp.x, -1.25, tmp.z);
+                // g_eye = g_eye - (speed*view);
                 g_lookAt = vec3(dummyLoc.x, dummyLoc.y+camY, dummyLoc.z);
+                computeLookAt();
                 // g_lookAt = g_lookAt - (speed*view);
             }
 		}
         if (key == GLFW_KEY_D && action == GLFW_PRESS){
             view = g_lookAt - g_eye;
             strafe = cross(view, vec3(0, 1, 0));
-            if (!detectCollision(dummyLoc + (speed*strafe)) && !detectHeight(dummyLoc + (speed*strafe))) {
+            if (!detectCollision(dummyLoc + (speed*strafe))) {
                 dummyLoc = dummyLoc + (speed*strafe);
                 g_eye = g_eye + (speed*strafe);
                 g_lookAt = vec3(dummyLoc.x, dummyLoc.y+camY, dummyLoc.z);
@@ -306,26 +314,28 @@ public:
 
     bool detectCollision(vec3 myPos) {
         vec2 occPos = findMySpace(myPos);
+        if (occPos.x > 30 || occPos.y > 30 || occPos.y < 0) // If beyond the bounds of the maze
+            return true;
         if (occupancy[(int)occPos.x][(int)occPos.y] != 1) // If not a wall
             return false;
         else
             return true;
     }
 
-    bool detectHeight(vec3 myPos) {
-        // if (thirdP) {
-            if (myPos.y > -0.9 || myPos.y < -1.35)
-                return true;
-            else
-                return false;
-        // } else {
-        //     if (myPos.y > 0.5 || myPos.y < -0.05)
-        //         return true;
-        //     else
-        //         return false;
-        // }
+    // bool detectHeight(vec3 myPos) {
+    //     // if (thirdP) {
+    //         if (myPos.y > -0.9 || myPos.y < -1.35)
+    //             return true;
+    //         else
+    //             return false;
+    //     // } else {
+    //     //     if (myPos.y > 0.5 || myPos.y < -0.05)
+    //     //         return true;
+    //     //     else
+    //     //         return false;
+    //     // }
 
-    }
+    // }
 
 	void mouseCallback(GLFWwindow *window, int button, int action, int mods)
 	{
@@ -865,7 +875,7 @@ public:
 	//directly pass quad for the ground to the GPU
 	void initGround() {
 
-		float g_groundSize = 35;
+		float g_groundSize = 65;
 		float g_groundY = -0.25;
 
   		// A x-z plane at y = g_groundY of dimension [-g_groundSize, g_groundSize]^2
@@ -1019,8 +1029,10 @@ public:
     void drawHouse(shared_ptr<MatrixStack> Model, shared_ptr<Program> drawProg) {
         Model->pushMatrix();
             Model->pushMatrix();
-                Model->translate(vec3(0, -1.25, -7));
-                Model->scale(vec3(0.25, 0.25, 0.25));
+                vec3 pos = mapSpaces(0, 17);
+                //Model->translate(vec3(0, -1.25, -7));
+                Model->translate(vec3(pos.x, -1.25, pos.z - 10));
+                Model->scale(vec3(0.35, 0.35, 0.35));
 
                 setModel(drawProg, Model);
                 for (int i=0; i < houseMesh.size(); i++) {
@@ -1122,12 +1134,109 @@ public:
         }
     }
 
+    void drawLeftArm(shared_ptr<MatrixStack> Model, shared_ptr<Program> prog, float frametime) {
+        // LEFT ARM
+        //  KEYFRAMES X-AXIS: -PI/2.4 (arm to side),
+        //  KEYFRAMES Z-AXIS: none, PI/8.0, none, -PI/8.0
+        Model->pushMatrix();
+            Model->translate(vec3(1.0f*dummyMesh[21]->min.x, 1.0f*dummyMesh[21]->min.y, 1.0f*dummyMesh[21]->max.z));
+            Model->rotate(-PI/2.4, vec3(1, 0, 0));
+            // Model->rotate(-PI/8.0, vec3(0, 0, 1));
+            // Model->rotate(lArmKF[frame], vec3(0, 0, 1));
+            handleInterpolation(lArmKF[frame], frametime, Model, vec3(0, 0, 1), "Left arm");
+            Model->translate(vec3(-1.0f*dummyMesh[21]->min.x, -1.0f*dummyMesh[21]->min.y, -1.0f*dummyMesh[21]->max.z));
+            setModel(prog, Model);
+            for (int i=21; i <=26; i++) {
+                if (i < 23)
+                    SetMaterial(prog, 1);
+                else
+                    SetMaterial(prog, 3);
+                dummyMesh[i]->draw(prog);
+            }
+        Model->popMatrix();
+    }
+
+    void drawRightArm(shared_ptr<MatrixStack> Model, shared_ptr<Program> prog, float frametime) {
+        // RIGHT ARM
+        //  KEYFRAMES X-AXIS: PI/2.4 (arm to side)
+        //  KEYFRAMES Z-AXIS: none, PI/8.0, none, -PI/8.0
+        Model->pushMatrix();
+            Model->translate(vec3(1.0f*dummyMesh[15]->max.x, 1.0f*dummyMesh[15]->max.y, 1.0f*dummyMesh[15]->max.z));
+            Model->rotate(PI/2.4, vec3(1, 0, 0));
+            //Model->rotate(-PI/8.0, vec3(0, 0, 1));
+            handleInterpolation(rArmKF[frame], frametime, Model, vec3(0, 0, 1), "Right arm");
+            // Model->rotate(rArmKF[frame], vec3(0, 0, 1));
+            Model->translate(vec3(-1.0f*dummyMesh[15]->max.x, -1.0f*dummyMesh[15]->max.y, -1.0f*dummyMesh[15]->max.z));
+            setModel(prog, Model);
+            for (int i=15; i <=20; i++) {
+                if (i < 17)
+                    SetMaterial(prog, 1);
+                else
+                    SetMaterial(prog, 3);
+                dummyMesh[i]->draw(prog);
+            }
+        Model->popMatrix();
+    }
+
+    void drawLeftLeg(shared_ptr<MatrixStack> Model, shared_ptr<Program> prog, float frametime) {
+        // LEFT LEG
+        //  KEYFRAMES: PI/6.0 (leg backward), none (but knee bent), -PI/10.0, -PI/6.0, none,
+        Model->pushMatrix();
+            Model->translate(vec3(1.0f*dummyMesh[11]->min.x, 1.0f*dummyMesh[11]->min.y, 1.0f*dummyMesh[11]->max.z));
+            // Model->rotate(lLegKF[frame], vec3(0, 1, 0));
+            handleInterpolation(lLegKF[frame], frametime, Model, vec3(0, 1, 0), "Left leg");
+            Model->translate(vec3(-1.0f*dummyMesh[11]->min.x, -1.0f*dummyMesh[11]->min.y, -1.0f*dummyMesh[11]->max.z));
+            setModel(prog, Model);
+            SetMaterial(prog, 2);
+            dummyMesh[11]->draw(prog); // pelvis
+            dummyMesh[10]->draw(prog); // upper leg
+
+            // KEYFRAMES: none, PI/3.0, PI/4.0, none, none, 
+            Model->translate(vec3(1.0f*dummyMesh[9]->max.x, 1.0f*dummyMesh[9]->min.y, 1.0f*dummyMesh[9]->max.z));
+            // Model->rotate(lKneeKF[frame], vec3(0, 1, 0));
+            handleInterpolation(lKneeKF[frame], frametime, Model, vec3(0, 1, 0), "Left knee");
+            Model->translate(vec3(-1.0f*dummyMesh[9]->max.x, -1.0f*dummyMesh[9]->min.y, -1.0f*dummyMesh[9]->max.z));
+            setModel(prog, Model);
+            SetMaterial(prog, 2);
+            for (int i=6; i <=9; i++) {
+                if (i == 6)
+                    SetMaterial(prog, 4);
+                dummyMesh[i]->draw(prog);
+            }
+        Model->popMatrix();
+    }
+
+    void drawRightLeg(shared_ptr<MatrixStack> Model, shared_ptr<Program> prog, float frametime) {
+        // RIGHT LEG
+        //  KEYFRAMES: -PI/6.0 (leg forward), none, none, PI/6.0, none (but knee bent)
+        Model->pushMatrix();
+            Model->translate(vec3(1.0f*dummyMesh[5]->max.x, 1.0f*dummyMesh[5]->max.y, 1.0f*dummyMesh[5]->max.z));
+            // Model->rotate(rLegKF[frame], vec3(0, 1, 0));
+            handleInterpolation(rLegKF[frame], frametime, Model, vec3(0, 1, 0), "Right leg");
+            Model->translate(vec3(-1.0f*dummyMesh[5]->max.x, -1.0f*dummyMesh[5]->max.y, -1.0f*dummyMesh[5]->max.z));
+            setModel(prog, Model);
+            SetMaterial(prog, 2);
+            dummyMesh[5]->draw(prog); // pelvis
+            dummyMesh[4]->draw(prog); // upper leg
+
+            // KEYFRAMES: none, none, none, none, PI/3.0
+            Model->translate(vec3(1.0f*dummyMesh[9]->max.x, 1.0f*dummyMesh[9]->min.y, 1.0f*dummyMesh[9]->max.z));
+            // Model->rotate(rKneeKF[frame], vec3(0, 1, 0));
+            handleInterpolation(rKneeKF[frame], frametime, Model, vec3(0, 1, 0), "Right knee");
+            Model->translate(vec3(-1.0f*dummyMesh[9]->max.x, -1.0f*dummyMesh[9]->min.y, -1.0f*dummyMesh[9]->max.z));
+            setModel(prog, Model);
+            for (int i=0; i <=3; i++) {
+                if (i == 0)
+                    SetMaterial(prog, 4);
+                dummyMesh[i]->draw(prog);
+            }
+        Model->popMatrix();
+    }
+
     void drawDummy(shared_ptr<MatrixStack> Model, shared_ptr<Program> prog, float frametime) {
-        vec3 tmp;
         //int frame = (int)(glfwGetTime()*5)%6;
         Model->pushMatrix();
             Model->translate(vec3(dummyLoc.x, dummyLoc.y, dummyLoc.z));
-            //Model->translate(vec3((g_eye.x+(speed*view.x)), -1.25, (g_eye.z+(speed*view.z))));
             Model->scale(vec3(0.01, 0.01, 0.01));
             Model->rotate(dummyRot, vec3(0, 1, 0));
             // Model->rotate(-PI/2.0, vec3(0, 1, 0)); FIRST PERSON
@@ -1144,95 +1253,11 @@ public:
             dummyMesh[27]->draw(prog); // neck
             dummyMesh[28]->draw(prog); // head
 
-            // LEFT ARM
-            //  KEYFRAMES X-AXIS: -PI/2.4 (arm to side),
-            //  KEYFRAMES Z-AXIS: none, PI/8.0, none, -PI/8.0
-            Model->pushMatrix();
-                Model->translate(vec3(1.0f*dummyMesh[21]->min.x, 1.0f*dummyMesh[21]->min.y, 1.0f*dummyMesh[21]->max.z));
-                Model->rotate(-PI/2.4, vec3(1, 0, 0));
-                // Model->rotate(-PI/8.0, vec3(0, 0, 1));
-                // Model->rotate(lArmKF[frame], vec3(0, 0, 1));
-                handleInterpolation(lArmKF[frame], frametime, Model, vec3(0, 0, 1), "Left arm");
-                Model->translate(vec3(-1.0f*dummyMesh[21]->min.x, -1.0f*dummyMesh[21]->min.y, -1.0f*dummyMesh[21]->max.z));
-                setModel(prog, Model);
-                for (int i=21; i <=26; i++) {
-                    if (i < 23)
-                        SetMaterial(prog, 1);
-                    else
-                        SetMaterial(prog, 3);
-                    dummyMesh[i]->draw(prog);
-                }
-            Model->popMatrix();
-            // RIGHT ARM
-            //  KEYFRAMES X-AXIS: PI/2.4 (arm to side)
-            //  KEYFRAMES Z-AXIS: none, PI/8.0, none, -PI/8.0
-            Model->pushMatrix();
-                tmp = findCenter(15);
-                Model->translate(vec3(1.0f*dummyMesh[15]->max.x, 1.0f*dummyMesh[15]->max.y, 1.0f*dummyMesh[15]->max.z));
-                Model->rotate(PI/2.4, vec3(1, 0, 0));
-                //Model->rotate(-PI/8.0, vec3(0, 0, 1));
-                handleInterpolation(rArmKF[frame], frametime, Model, vec3(0, 0, 1), "Right arm");
-                // Model->rotate(rArmKF[frame], vec3(0, 0, 1));
-                Model->translate(vec3(-1.0f*dummyMesh[15]->max.x, -1.0f*dummyMesh[15]->max.y, -1.0f*dummyMesh[15]->max.z));
-                setModel(prog, Model);
-                for (int i=15; i <=20; i++) {
-                    if (i < 17)
-                        SetMaterial(prog, 1);
-                    else
-                        SetMaterial(prog, 3);
-                    dummyMesh[i]->draw(prog);
-                }
-            Model->popMatrix();
-            // LEFT LEG
-            //  KEYFRAMES: PI/6.0 (leg backward), none (but knee bent), -PI/10.0, -PI/6.0, none,
-            Model->pushMatrix();
-                Model->translate(vec3(1.0f*dummyMesh[11]->min.x, 1.0f*dummyMesh[11]->min.y, 1.0f*dummyMesh[11]->max.z));
-                // Model->rotate(lLegKF[frame], vec3(0, 1, 0));
-                handleInterpolation(lLegKF[frame], frametime, Model, vec3(0, 1, 0), "Left leg");
-                Model->translate(vec3(-1.0f*dummyMesh[11]->min.x, -1.0f*dummyMesh[11]->min.y, -1.0f*dummyMesh[11]->max.z));
-                setModel(prog, Model);
-                SetMaterial(prog, 2);
-                dummyMesh[11]->draw(prog); // pelvis
-                dummyMesh[10]->draw(prog); // upper leg
-
-                // KEYFRAMES: none, PI/3.0, PI/4.0, none, none, 
-                Model->translate(vec3(1.0f*dummyMesh[9]->max.x, 1.0f*dummyMesh[9]->min.y, 1.0f*dummyMesh[9]->max.z));
-                // Model->rotate(lKneeKF[frame], vec3(0, 1, 0));
-                handleInterpolation(lKneeKF[frame], frametime, Model, vec3(0, 1, 0), "Left knee");
-                Model->translate(vec3(-1.0f*dummyMesh[9]->max.x, -1.0f*dummyMesh[9]->min.y, -1.0f*dummyMesh[9]->max.z));
-                setModel(prog, Model);
-                SetMaterial(prog, 2);
-                for (int i=6; i <=9; i++) {
-                    if (i == 6)
-                        SetMaterial(prog, 4);
-                    dummyMesh[i]->draw(prog);
-                }
-            Model->popMatrix();
-            // RIGHT LEG
-            //  KEYFRAMES: -PI/6.0 (leg forward), none, none, PI/6.0, none (but knee bent)
-            Model->pushMatrix();
-                tmp = findCenter(5);
-                Model->translate(vec3(1.0f*dummyMesh[5]->max.x, 1.0f*dummyMesh[5]->max.y, 1.0f*dummyMesh[5]->max.z));
-                // Model->rotate(rLegKF[frame], vec3(0, 1, 0));
-                handleInterpolation(rLegKF[frame], frametime, Model, vec3(0, 1, 0), "Right leg");
-                Model->translate(vec3(-1.0f*dummyMesh[5]->max.x, -1.0f*dummyMesh[5]->max.y, -1.0f*dummyMesh[5]->max.z));
-                setModel(prog, Model);
-                SetMaterial(prog, 2);
-                dummyMesh[5]->draw(prog); // pelvis
-                dummyMesh[4]->draw(prog); // upper leg
-
-                // KEYFRAMES: none, none, none, none, PI/3.0
-                Model->translate(vec3(1.0f*dummyMesh[9]->max.x, 1.0f*dummyMesh[9]->min.y, 1.0f*dummyMesh[9]->max.z));
-                // Model->rotate(rKneeKF[frame], vec3(0, 1, 0));
-                handleInterpolation(rKneeKF[frame], frametime, Model, vec3(0, 1, 0), "Right knee");
-                Model->translate(vec3(-1.0f*dummyMesh[9]->max.x, -1.0f*dummyMesh[9]->min.y, -1.0f*dummyMesh[9]->max.z));
-                setModel(prog, Model);
-                for (int i=0; i <=3; i++) {
-                    if (i == 0)
-                        SetMaterial(prog, 4);
-                    dummyMesh[i]->draw(prog);
-                }
-            Model->popMatrix();
+            drawLeftArm(Model, prog, frametime);
+            drawRightArm(Model, prog, frametime);
+            
+            drawLeftLeg(Model, prog, frametime);
+            drawRightLeg(Model, prog, frametime);
         Model->popMatrix();
     }
 
@@ -1301,6 +1326,7 @@ public:
             SetView(texProg);
             // glUniform3f(texProg->getUniform("lightPos"), 3.0+lightTrans, 8.0, 7);
             glUniform3f(texProg->getUniform("lightPos"), g_eye.x, g_eye.y, g_eye.z);
+            // glUniform3f(texProg->getUniform("lightPos"), dummyLoc.x, dummyLoc.y, dummyLoc.z);
             glUniform3f(texProg->getUniform("D"), gaze.x, gaze.y, gaze.z);
             glUniform1i(texProg->getUniform("flip"), 1);
 
@@ -1326,7 +1352,7 @@ public:
             //     }
             // Model->popMatrix();
 
-            // drawHouse(Model, texProg);
+            drawHouse(Model, texProg);
             // drawLamps(Model, texProg);
 
             // hedge->bind(texProg->getUniform("Texture0"));
@@ -1368,6 +1394,7 @@ public:
             glUniformMatrix4fv(progInst->getUniform("P"), 1, GL_FALSE, value_ptr(Projection->topMatrix()));
             SetView(progInst);
             glUniform3f(progInst->getUniform("lightPos"), g_eye.x, g_eye.y, g_eye.z);
+            // glUniform3f(texProg->getUniform("lightPos"), dummyLoc.x, dummyLoc.y, dummyLoc.z);
             glUniform3f(progInst->getUniform("D"), gaze.x, gaze.y, gaze.z);
             for (int i=0; i < cubeInst.size(); i++) {   
                 int mat = cubeInst[i]->getMat()[0];
@@ -1392,12 +1419,12 @@ public:
             Model->pushMatrix();
             Model->translate(vec3(0, -3, 0));
             Model->rotate(3.1416, vec3(0, 1, 0));
-            Model->scale(vec3(70, 70, 70));
+            Model->scale(vec3(100, 100, 100));
             glUniformMatrix4fv(cubeProg->getUniform("M"), 1, GL_FALSE,value_ptr(Model->topMatrix()));
             Model->popMatrix();
             glBindTexture(GL_TEXTURE_CUBE_MAP, cubeMapTexture);
 
-            cube->draw(cubeProg);
+            //cube->draw(cubeProg);
 
             glDepthFunc(GL_LESS);
         cubeProg->unbind(); 
@@ -1405,6 +1432,7 @@ public:
         prog->bind();
             glUniformMatrix4fv(prog->getUniform("P"), 1, GL_FALSE, value_ptr(Projection->topMatrix()));
             glUniform3f(prog->getUniform("lightPos"), g_eye.x, g_eye.y, g_eye.z);
+            // glUniform3f(texProg->getUniform("lightPos"), dummyLoc.x, dummyLoc.y, dummyLoc.z);
             glUniform3f(prog->getUniform("D"), gaze.x, gaze.y, gaze.z);
             SetView(prog);
             drawDummy(Model, prog, frametime);
