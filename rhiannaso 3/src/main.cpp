@@ -152,16 +152,18 @@ public:
 
 	//camera
 	double g_phi, g_theta;
+    vec3 dummyLoc = vec3(16, -1.25, 30);
+    float dummyRot = PI/2.0;
 	vec3 view = vec3(0, 0, 1);
 	vec3 strafe = vec3(1, 0, 0);
-	vec3 g_eye = vec3(16, 0, 33);
     // vec3 g_eye = vec3(mapSpaces(11, 15).x, 0, mapSpaces(11, 15).z);
     // vec3 g_eye = vec3(0, 60, 10);
     // vec3 g_lookAt = vec3(0, 0, 0);
-	vec3 g_lookAt = vec3(16, 0, 30);
     float speed = 0.3;
-
-    vec3 dummyLoc = vec3(16, -1.25, 30);
+    float camY = 1.75;
+    float camZ = 2;
+    vec3 g_eye = vec3(16, 0.5, 32); // 16, 0, 33
+    vec3 g_lookAt = vec3(dummyLoc.x, dummyLoc.y+camY, dummyLoc.z); // 16, 0, 30
 
     // Chopping actions
     int hasAxe = 0;
@@ -190,12 +192,13 @@ public:
 			glPolygonMode( GL_FRONT_AND_BACK, GL_LINE );
 		}
         if (key == GLFW_KEY_T && action == GLFW_PRESS) { // Chopping down trees
-            vec2 tmp = findMySpace(g_eye);
+            vec2 tmp = findMySpace(g_eye); // TODO: change to dummyLoc
             if (hasAxe > 0 && firstAct) {
-                vec2 chopLoc = findMySpace(g_lookAt);
+                vec2 chopLoc = findMySpace(g_lookAt); // TODO: figure out what to change to (maybe dummyLoc + 1 in whatever direction it's facing)
                 float i = chopLoc.x;
                 float j = chopLoc.y;
                 vec3 view = g_eye-g_lookAt;
+                // TODO: change to g_lookAt - g_eye
                 cout << "VIEW: " << view.x << endl;
                 cout << "VIEW: " << view.z << endl;
                 view = vec3(round(view.x), round(view.y), round(view.z));
@@ -252,36 +255,40 @@ public:
 		}
         if (key == GLFW_KEY_W && action == GLFW_PRESS){
 			view = g_lookAt - g_eye;
-            if (!detectCollision(g_eye + (speed*view)) && !detectHeight(g_eye + (speed*view))) {
-                // dummyLoc = dummyLoc + (speed*view);
+            if (!detectCollision(dummyLoc + (speed*view)) && !detectHeight(dummyLoc + (speed*view))) { // originally g_eye not dummyLoc
+                dummyLoc = dummyLoc + (speed*view);
                 g_eye = g_eye + (speed*view);
-                g_lookAt = g_lookAt + (speed*view);
+                g_lookAt = vec3(dummyLoc.x, dummyLoc.y+camY, dummyLoc.z);
+                // g_lookAt = g_lookAt + (speed*view);
             }
 		}
         if (key == GLFW_KEY_A && action == GLFW_PRESS){
             view = g_lookAt - g_eye;
             strafe = cross(view, vec3(0, 1, 0));
-            if (!detectCollision(g_eye - (speed*strafe)) && !detectHeight(g_eye - (speed*strafe))) {
-                // dummyLoc = dummyLoc - (speed*strafe);
+            if (!detectCollision(dummyLoc - (speed*strafe)) && !detectHeight(dummyLoc - (speed*strafe))) {
+                dummyLoc = dummyLoc - (speed*strafe);
                 g_eye = g_eye - (speed*strafe);
-                g_lookAt = g_lookAt - (speed*strafe);
+                g_lookAt = vec3(dummyLoc.x, dummyLoc.y+camY, dummyLoc.z);
+                // g_lookAt = g_lookAt - (speed*strafe);
             }
 		}
         if (key == GLFW_KEY_S && action == GLFW_PRESS){
 			view = g_lookAt - g_eye;
-            if (!detectCollision(g_eye - (speed*view)) && !detectHeight(g_eye - (speed*view))) {
-                // dummyLoc = dummyLoc - (speed*view);
+            if (!detectCollision(dummyLoc - (speed*view)) && !detectHeight(dummyLoc - (speed*view))) {
+                dummyLoc = dummyLoc - (speed*view);
                 g_eye = g_eye - (speed*view);
-                g_lookAt = g_lookAt - (speed*view);
+                g_lookAt = vec3(dummyLoc.x, dummyLoc.y+camY, dummyLoc.z);
+                // g_lookAt = g_lookAt - (speed*view);
             }
 		}
         if (key == GLFW_KEY_D && action == GLFW_PRESS){
             view = g_lookAt - g_eye;
             strafe = cross(view, vec3(0, 1, 0));
-            if (!detectCollision(g_eye + (speed*strafe)) && !detectHeight(g_eye + (speed*strafe))) {
-                // dummyLoc = dummyLoc + (speed*strafe);
+            if (!detectCollision(dummyLoc + (speed*strafe)) && !detectHeight(dummyLoc + (speed*strafe))) {
+                dummyLoc = dummyLoc + (speed*strafe);
                 g_eye = g_eye + (speed*strafe);
-                g_lookAt = g_lookAt + (speed*strafe);
+                g_lookAt = vec3(dummyLoc.x, dummyLoc.y+camY, dummyLoc.z);
+                // g_lookAt = g_lookAt + (speed*strafe);
             }
 		}
 	}
@@ -304,10 +311,18 @@ public:
     }
 
     bool detectHeight(vec3 myPos) {
-        if (myPos.y > 0.5 || myPos.y < -0.05)
-            return true;
-        else
-            return false;
+        // if (thirdP) {
+            if (myPos.y > -0.9 || myPos.y < -1.35)
+                return true;
+            else
+                return false;
+        // } else {
+        //     if (myPos.y > 0.5 || myPos.y < -0.05)
+        //         return true;
+        //     else
+        //         return false;
+        // }
+
     }
 
 	void mouseCallback(GLFWwindow *window, int button, int action, int mods)
@@ -343,11 +358,14 @@ public:
     }
 
     void computeLookAt() {
-        float radius = 1.0;
+        // float radius = 1.0;
+        float radius = 2;
+        dummyRot = -g_theta;
         float x = radius*cos(g_phi)*cos(g_theta);
         float y = radius*sin(g_phi);
         float z = radius*cos(g_phi)*cos((PI/2.0)-g_theta);
-        g_lookAt = vec3(x, y, z) + g_eye;
+        g_eye = g_lookAt - vec3(x, y, z);
+        // g_lookAt = vec3(x, y, z) + g_eye;
     }
 
 	void resizeCallback(GLFWwindow *window, int width, int height)
@@ -1105,7 +1123,8 @@ public:
             Model->translate(vec3(dummyLoc.x, dummyLoc.y, dummyLoc.z));
             //Model->translate(vec3((g_eye.x+(speed*view.x)), -1.25, (g_eye.z+(speed*view.z))));
             Model->scale(vec3(0.01, 0.01, 0.01));
-            //Model->rotate(-PI/2.0, vec3(0, 1, 0));
+            Model->rotate(dummyRot, vec3(0, 1, 0));
+            // Model->rotate(-PI/2.0, vec3(0, 1, 0)); FIRST PERSON
             Model->rotate(-PI/2.0, vec3(1, 0, 0));
             setModel(prog, Model);
             for (int i=12; i <= 14; i++) {
@@ -1122,7 +1141,7 @@ public:
                 Model->rotate(-PI/2.4, vec3(1, 0, 0));
                 // Model->rotate(-PI/8.0, vec3(0, 0, 1));
                 // Model->rotate(lArmKF[frame], vec3(0, 0, 1));
-                handleInterpolation(lArmKF[frame], frametime, Model, vec3(0, 0, 1), "Left arm");
+                // handleInterpolation(lArmKF[frame], frametime, Model, vec3(0, 0, 1), "Left arm");
                 Model->translate(vec3(-1.0f*dummyMesh[21]->min.x, -1.0f*dummyMesh[21]->min.y, -1.0f*dummyMesh[21]->max.z));
                 setModel(prog, Model);
                 for (int i=21; i <=26; i++) {
@@ -1137,7 +1156,7 @@ public:
                 Model->translate(vec3(1.0f*dummyMesh[15]->max.x, 1.0f*dummyMesh[15]->max.y, 1.0f*dummyMesh[15]->max.z));
                 Model->rotate(PI/2.4, vec3(1, 0, 0));
                 //Model->rotate(-PI/8.0, vec3(0, 0, 1));
-                handleInterpolation(rArmKF[frame], frametime, Model, vec3(0, 0, 1), "Right arm");
+                // handleInterpolation(rArmKF[frame], frametime, Model, vec3(0, 0, 1), "Right arm");
                 // Model->rotate(rArmKF[frame], vec3(0, 0, 1));
                 Model->translate(vec3(-1.0f*dummyMesh[15]->max.x, -1.0f*dummyMesh[15]->max.y, -1.0f*dummyMesh[15]->max.z));
                 setModel(prog, Model);
@@ -1150,7 +1169,7 @@ public:
             Model->pushMatrix();
                 Model->translate(vec3(1.0f*dummyMesh[11]->min.x, 1.0f*dummyMesh[11]->min.y, 1.0f*dummyMesh[11]->max.z));
                 // Model->rotate(lLegKF[frame], vec3(0, 1, 0));
-                handleInterpolation(lLegKF[frame], frametime, Model, vec3(0, 1, 0), "Left leg");
+                // handleInterpolation(lLegKF[frame], frametime, Model, vec3(0, 1, 0), "Left leg");
                 Model->translate(vec3(-1.0f*dummyMesh[11]->min.x, -1.0f*dummyMesh[11]->min.y, -1.0f*dummyMesh[11]->max.z));
                 setModel(prog, Model);
                 dummyMesh[11]->draw(prog); // pelvis
@@ -1159,7 +1178,7 @@ public:
                 // KEYFRAMES: none, PI/3.0, PI/4.0, none, none, 
                 Model->translate(vec3(1.0f*dummyMesh[9]->max.x, 1.0f*dummyMesh[9]->min.y, 1.0f*dummyMesh[9]->max.z));
                 // Model->rotate(lKneeKF[frame], vec3(0, 1, 0));
-                handleInterpolation(lKneeKF[frame], frametime, Model, vec3(0, 1, 0), "Left knee");
+                // handleInterpolation(lKneeKF[frame], frametime, Model, vec3(0, 1, 0), "Left knee");
                 Model->translate(vec3(-1.0f*dummyMesh[9]->max.x, -1.0f*dummyMesh[9]->min.y, -1.0f*dummyMesh[9]->max.z));
                 setModel(prog, Model);
                 for (int i=6; i <=9; i++) {
@@ -1172,7 +1191,7 @@ public:
                 tmp = findCenter(5);
                 Model->translate(vec3(1.0f*dummyMesh[5]->max.x, 1.0f*dummyMesh[5]->max.y, 1.0f*dummyMesh[5]->max.z));
                 // Model->rotate(rLegKF[frame], vec3(0, 1, 0));
-                handleInterpolation(rLegKF[frame], frametime, Model, vec3(0, 1, 0), "Right leg");
+                // handleInterpolation(rLegKF[frame], frametime, Model, vec3(0, 1, 0), "Right leg");
                 Model->translate(vec3(-1.0f*dummyMesh[5]->max.x, -1.0f*dummyMesh[5]->max.y, -1.0f*dummyMesh[5]->max.z));
                 setModel(prog, Model);
                 dummyMesh[5]->draw(prog); // pelvis
@@ -1181,7 +1200,7 @@ public:
                 // KEYFRAMES: none, none, none, none, PI/3.0
                 Model->translate(vec3(1.0f*dummyMesh[9]->max.x, 1.0f*dummyMesh[9]->min.y, 1.0f*dummyMesh[9]->max.z));
                 // Model->rotate(rKneeKF[frame], vec3(0, 1, 0));
-                handleInterpolation(rKneeKF[frame], frametime, Model, vec3(0, 1, 0), "Right knee");
+                // handleInterpolation(rKneeKF[frame], frametime, Model, vec3(0, 1, 0), "Right knee");
                 Model->translate(vec3(-1.0f*dummyMesh[9]->max.x, -1.0f*dummyMesh[9]->min.y, -1.0f*dummyMesh[9]->max.z));
                 setModel(prog, Model);
                 for (int i=0; i <=3; i++) {
