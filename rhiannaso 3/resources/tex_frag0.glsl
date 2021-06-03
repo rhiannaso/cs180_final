@@ -4,10 +4,15 @@ uniform sampler2D Texture0;
 uniform float MatShine;
 
 uniform int flip;
+uniform vec3 D;
 
 vec3 MatAmb;
 vec3 MatDif;
 vec3 MatSpec;
+
+float a = 0;
+float b = 2;
+float c = 0;
 
 in vec2 vTexCoord;
 
@@ -27,12 +32,14 @@ void main() {
   	normal *= -1.0f;
   vec3 light = normalize(lightDir);
   float dC = max(0, dot(normal, light));
+  float dist = sqrt(pow((lightDir.x - EPos.x), 2) + pow((lightDir.y - EPos.y), 2) + pow((lightDir.z - EPos.z), 2));
+  float denom = a + (b*dist) + (c*pow(dist, 2));
+  float IL = dot(D, light)/denom;
 
   vec3 V = -1*EPos;
   vec3 H = normalize(lightDir + V);
   float NH = max(0, dot(normal, H));
   float NHPow = pow(NH, MatShine);
-  //Outcolor = vec4(dC*texColor0.xyz, 1.0);
   if (texColor0.a < 0.1) {
       discard;
   }
@@ -41,7 +48,8 @@ void main() {
   MatDif = (0.7*texColor0).xyz;
   MatSpec = (0.7*texColor0).xyz;
 
-  Outcolor = vec4(MatAmb + (dC*MatDif) + (NHPow*MatSpec), 1.0);
+  //Outcolor = vec4(MatAmb + (dC*MatDif) + (NHPow*MatSpec), 1.0);
+  Outcolor = vec4((MatAmb*IL) + (dist*((dC*MatDif*IL) + (NHPow*MatSpec*IL))), 1.0);
 
   //to confirm texture coordinates
   //Outcolor = vec4(vTexCoord.x, vTexCoord.y, 0, 0);

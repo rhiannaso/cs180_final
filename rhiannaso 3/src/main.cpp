@@ -163,6 +163,7 @@ public:
     float camZ = 2;
     vec3 g_eye = vec3(dummyLoc.x, dummyLoc.y+camY, dummyLoc.z+camZ); // 16, 0, 33
     vec3 g_lookAt = vec3(dummyLoc.x, dummyLoc.y+camY, dummyLoc.z); // 16, 0, 30
+    vec3 gaze = g_eye - g_lookAt;
 
     // Chopping actions
     int hasAxe = 0;
@@ -341,10 +342,10 @@ public:
 	void scrollCallback(GLFWwindow* window, double deltaX, double deltaY) {
         if (!goCamera) {
             g_theta -= deltaX/100;
-            if (g_phi < DegToRad(80) && g_phi > -DegToRad(80)) {
+            if (g_phi < DegToRad(60) && g_phi > -DegToRad(80)) {
                 g_phi += deltaY/100;
             }
-            if (g_phi >= DegToRad(80) && deltaY < 0) {
+            if (g_phi >= DegToRad(60) && deltaY < 0) {
                 g_phi += deltaY/100;
             }
             if (g_phi <= DegToRad(80) && deltaY > 0) {
@@ -546,6 +547,7 @@ public:
 		prog->addUniform("MatDif");
 		prog->addUniform("MatSpec");
 		prog->addUniform("MatShine");
+        prog->addUniform("D");
 		prog->addUniform("lightPos");
 		prog->addAttribute("vertPos");
 		prog->addAttribute("vertNor");
@@ -562,6 +564,7 @@ public:
 		texProg->addUniform("flip");
 		texProg->addUniform("Texture0");
 		texProg->addUniform("MatShine");
+        texProg->addUniform("D");
 		texProg->addUniform("lightPos");
 		texProg->addAttribute("vertPos");
 		texProg->addAttribute("vertNor");
@@ -589,6 +592,7 @@ public:
 		progInst->addUniform("V");
         progInst->addUniform("Texture0");
 		progInst->addUniform("MatShine");
+        progInst->addUniform("D");
         progInst->addUniform("lightPos");
 		progInst->addAttribute("vertPos");
 		progInst->addAttribute("vertNor");
@@ -596,8 +600,6 @@ public:
 		progInst->addAttribute("instanceMatrix");
 
   		// init splines up and down
-    //    splinepath[0] = Spline(glm::vec3(-6,3,5), glm::vec3(-1,0,5), glm::vec3(1, 5, 5), glm::vec3(3,3,5), 5);
-    //    splinepath[1] = Spline(glm::vec3(3,3,5), glm::vec3(4,1,5), glm::vec3(-0.75, 0.25, 5), glm::vec3(0,0,5), 5);
         splinepath[0] = Spline(glm::vec3(-20,12,-20), glm::vec3(-10,10,-10), glm::vec3(0, 8, 0), glm::vec3(10,6,10), 5);
         splinepath[1] = Spline(glm::vec3(10,6,10), glm::vec3(20,4,20), glm::vec3(25, 2, 30), glm::vec3(16,0,33), 5);
     
@@ -1217,7 +1219,8 @@ public:
             glUniformMatrix4fv(texProg->getUniform("P"), 1, GL_FALSE, value_ptr(Projection->topMatrix()));
             SetView(texProg);
             // glUniform3f(texProg->getUniform("lightPos"), 3.0+lightTrans, 8.0, 7);
-            glUniform3f(texProg->getUniform("lightPos"), g_eye.x-0.5, g_eye.y, g_eye.z-0.5);
+            glUniform3f(texProg->getUniform("lightPos"), g_eye.x, g_eye.y, g_eye.z);
+            glUniform3f(texProg->getUniform("D"), gaze.x, gaze.y, gaze.z);
             glUniform1i(texProg->getUniform("flip"), 1);
 
             // Model->pushMatrix();
@@ -1283,7 +1286,8 @@ public:
         progInst->bind();
             glUniformMatrix4fv(progInst->getUniform("P"), 1, GL_FALSE, value_ptr(Projection->topMatrix()));
             SetView(progInst);
-            glUniform3f(progInst->getUniform("lightPos"), g_eye.x-0.5, g_eye.y, g_eye.z-0.5);
+            glUniform3f(progInst->getUniform("lightPos"), g_eye.x, g_eye.y, g_eye.z);
+            glUniform3f(progInst->getUniform("D"), gaze.x, gaze.y, gaze.z);
             for (int i=0; i < cubeInst.size(); i++) {   
                 int mat = cubeInst[i]->getMat()[0];
                 SetGenericMat(progInst, treeMat[mat].ambient, treeMat[mat].diffuse, treeMat[mat].specular, treeMat[mat].shininess, "tree");
@@ -1305,7 +1309,7 @@ public:
             glDepthFunc(GL_LEQUAL);
             SetView(cubeProg);
             Model->pushMatrix();
-            Model->translate(vec3(0, 0, 0));
+            Model->translate(vec3(0, -3, 0));
             Model->rotate(3.1416, vec3(0, 1, 0));
             Model->scale(vec3(70, 70, 70));
             glUniformMatrix4fv(cubeProg->getUniform("M"), 1, GL_FALSE,value_ptr(Model->topMatrix()));
@@ -1319,7 +1323,8 @@ public:
 
         prog->bind();
             glUniformMatrix4fv(prog->getUniform("P"), 1, GL_FALSE, value_ptr(Projection->topMatrix()));
-            glUniform3f(prog->getUniform("lightPos"), g_eye.x-0.5, g_eye.y, g_eye.z-0.5);
+            glUniform3f(prog->getUniform("lightPos"), g_eye.x, g_eye.y, g_eye.z);
+            glUniform3f(prog->getUniform("D"), gaze.x, gaze.y, gaze.z);
             SetView(prog);
             SetMaterial(prog, 2);
             drawDummy(Model, prog, frametime);
