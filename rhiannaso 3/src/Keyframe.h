@@ -13,14 +13,16 @@ class Keyframe
 {
 
 public:
-    Keyframe(float start, float end, float t);
+    Keyframe(float start, float end, float t, std::string part);
 	virtual ~Keyframe();
     // void init(float start, float end, float t);
     float returnStart() { return startAngle; }
     float returnEnd() { return endAngle; }
+    char* returnPart() { return part; }
     float interpolate(float currTime);
     void setStart(float t) { startTime = t; }
     bool isDone() { return done; }
+    void resetDone() { done = false; }
 
 private:
     float startAngle;
@@ -28,6 +30,7 @@ private:
     float duration; // duration of keyframe animation
     float startTime;
     float done;
+    char* part;
 };
 
 #endif // KEYFRAME_H
