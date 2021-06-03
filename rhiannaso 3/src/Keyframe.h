@@ -15,6 +15,7 @@ class Keyframe
 public:
     Keyframe(float start, float end, float t);
 	virtual ~Keyframe();
+    // void init(float start, float end, float t);
     float returnStart() { return startAngle; }
     float returnEnd() { return endAngle; }
     float interpolate(float currTime);

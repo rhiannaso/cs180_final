@@ -15,6 +15,14 @@ Keyframe::Keyframe(float start, float end, float t) {
     done = false;
 }
 
+// void Keyframe::init(float start, float end, float t) {
+//     startAngle = start;
+// 	endAngle = end;
+// 	duration = t;
+//     startTime = 0;
+//     done = false;
+// }
+
 float Keyframe::interpolate(float currTime) {
     cout << "Start in func: " << startTime << endl;
     cout << "Curr time in func: " << currTime << endl;

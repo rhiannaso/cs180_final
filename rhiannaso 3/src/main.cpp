@@ -663,6 +663,55 @@ public:
                 tmp = Keyframe(rKnee[i], rKnee[0], frameDur);
             rKneeKF.push_back(tmp);
         }
+        /*
+        vector<float> arms{0, PI/8.0, 0, -PI/8.0};
+        for (int i=0; i < arms.size(); i++) {
+            shared_ptr<Keyframe> tmp = make_shared<Keyframe>();
+            if (i == arms.size()-1)
+               tmp->init(arms[i], arms[0], frameDur);
+            else
+                tmp->init(arms[i], arms[i+1], frameDur);
+            lArmKF.push_back(tmp);
+            rArmKF.push_back(tmp);
+        }
+
+        vector<float> legs{PI/6.0, 0, -PI/6.0, 0};
+        for (int i=0; i < legs.size(); i++) {
+            shared_ptr<Keyframe> tmp = make_shared<Keyframe>();
+            if (i == legs.size()-1)
+                tmp->init(legs[i], legs[0], frameDur);
+            else
+                tmp->init(legs[i], legs[i+1], frameDur);
+            lLegKF.push_back(tmp);
+
+            shared_ptr<Keyframe> tmp2 = make_shared<Keyframe>();
+            if (i == legs.size()-1)
+                tmp2->init(-1*legs[i], -1*legs[0], frameDur);
+            else
+                tmp2->init(-1*legs[i], -1*legs[i+1], frameDur);
+            rLegKF.push_back(tmp2);
+        }
+
+        vector<float> lKnee{0, PI/3.0, 0, 0};
+        for (int i=0; i < lKnee.size(); i++) {
+            shared_ptr<Keyframe> tmp = make_shared<Keyframe>();
+            if (i == lKnee.size()-1)
+                tmp->init(lKnee[i], lKnee[0], frameDur);
+            else
+                tmp->init(lKnee[i], lKnee[i+1], frameDur);
+            lKneeKF.push_back(tmp);
+        }
+
+        vector<float> rKnee{0, 0, 0, PI/3.0};
+        for (int i=0; i < rKnee.size(); i++) {
+            shared_ptr<Keyframe> tmp = make_shared<Keyframe>();
+            if (i == rKnee.size()-1)
+                tmp->init(rKnee[i], rKnee[0], frameDur);
+            else
+                tmp->init(rKnee[i], rKnee[i+1], frameDur);
+            rKneeKF.push_back(tmp);
+        }
+        */
     }
 
 	void initGeom(const std::string& resourceDirectory)
@@ -905,18 +954,30 @@ public:
     			glUniform3f(curS->getUniform("MatSpec"), 0.45, 0.23, 0.45);
     			glUniform1f(curS->getUniform("MatShine"), 120.0);
     		break;
-    		case 1: // pink
-    			glUniform3f(curS->getUniform("MatAmb"), 0.063, 0.038, 0.1);
-    			glUniform3f(curS->getUniform("MatDif"), 0.63, 0.38, 1.0);
-    			glUniform3f(curS->getUniform("MatSpec"), 0.3, 0.2, 0.5);
-    			glUniform1f(curS->getUniform("MatShine"), 4.0);
+    		case 1: // red rubber
+    			glUniform3f(curS->getUniform("MatAmb"), 0.05f, 0.0f, 0.0f);
+    			glUniform3f(curS->getUniform("MatDif"), 0.5f, 0.4f, 0.4f);
+    			glUniform3f(curS->getUniform("MatSpec"), 0.7f, 0.04f, 0.04f);
+    			glUniform1f(curS->getUniform("MatShine"), 10.0);
     		break;
-    		case 2: 
+    		case 2: // blue
     			glUniform3f(curS->getUniform("MatAmb"), 0.004, 0.05, 0.09);
     			glUniform3f(curS->getUniform("MatDif"), 0.04, 0.5, 0.9);
     			glUniform3f(curS->getUniform("MatSpec"), 0.02, 0.25, 0.45);
     			glUniform1f(curS->getUniform("MatShine"), 27.9);
     		break;
+            case 3: // perl
+                glUniform3f(curS->getUniform("MatAmb"), 0.25f, 0.20725f, 0.20725f);
+    			glUniform3f(curS->getUniform("MatDif"), 1.0f, 0.829f, 0.829f);
+    			glUniform3f(curS->getUniform("MatSpec"), 0.296648f, 0.296648f, 0.296648f);
+    			glUniform1f(curS->getUniform("MatShine"), 11.264f);
+            break;
+            case 4: // black rubber
+                glUniform3f(curS->getUniform("MatAmb"), 0.02f, 0.02f, 0.02f);
+    			glUniform3f(curS->getUniform("MatDif"), 0.01f, 0.01f, 0.01f);
+    			glUniform3f(curS->getUniform("MatSpec"), 0.4f, 0.4f, 0.4f);
+    			glUniform1f(curS->getUniform("MatShine"), 10.0f);
+            break;
   		}
 	}
 
@@ -1073,8 +1134,13 @@ public:
             Model->rotate(-PI/2.0, vec3(1, 0, 0));
             setModel(prog, Model);
             for (int i=12; i <= 14; i++) {
+                if (i == 12)
+                    SetMaterial(prog, 2);
+                else
+                    SetMaterial(prog, 1);
                 dummyMesh[i]->draw(prog);
             }
+            SetMaterial(prog, 3);
             dummyMesh[27]->draw(prog); // neck
             dummyMesh[28]->draw(prog); // head
 
@@ -1086,10 +1152,14 @@ public:
                 Model->rotate(-PI/2.4, vec3(1, 0, 0));
                 // Model->rotate(-PI/8.0, vec3(0, 0, 1));
                 // Model->rotate(lArmKF[frame], vec3(0, 0, 1));
-                // handleInterpolation(lArmKF[frame], frametime, Model, vec3(0, 0, 1), "Left arm");
+                handleInterpolation(lArmKF[frame], frametime, Model, vec3(0, 0, 1), "Left arm");
                 Model->translate(vec3(-1.0f*dummyMesh[21]->min.x, -1.0f*dummyMesh[21]->min.y, -1.0f*dummyMesh[21]->max.z));
                 setModel(prog, Model);
                 for (int i=21; i <=26; i++) {
+                    if (i < 23)
+                        SetMaterial(prog, 1);
+                    else
+                        SetMaterial(prog, 3);
                     dummyMesh[i]->draw(prog);
                 }
             Model->popMatrix();
@@ -1101,11 +1171,15 @@ public:
                 Model->translate(vec3(1.0f*dummyMesh[15]->max.x, 1.0f*dummyMesh[15]->max.y, 1.0f*dummyMesh[15]->max.z));
                 Model->rotate(PI/2.4, vec3(1, 0, 0));
                 //Model->rotate(-PI/8.0, vec3(0, 0, 1));
-                // handleInterpolation(rArmKF[frame], frametime, Model, vec3(0, 0, 1), "Right arm");
+                handleInterpolation(rArmKF[frame], frametime, Model, vec3(0, 0, 1), "Right arm");
                 // Model->rotate(rArmKF[frame], vec3(0, 0, 1));
                 Model->translate(vec3(-1.0f*dummyMesh[15]->max.x, -1.0f*dummyMesh[15]->max.y, -1.0f*dummyMesh[15]->max.z));
                 setModel(prog, Model);
                 for (int i=15; i <=20; i++) {
+                    if (i < 17)
+                        SetMaterial(prog, 1);
+                    else
+                        SetMaterial(prog, 3);
                     dummyMesh[i]->draw(prog);
                 }
             Model->popMatrix();
@@ -1114,19 +1188,23 @@ public:
             Model->pushMatrix();
                 Model->translate(vec3(1.0f*dummyMesh[11]->min.x, 1.0f*dummyMesh[11]->min.y, 1.0f*dummyMesh[11]->max.z));
                 // Model->rotate(lLegKF[frame], vec3(0, 1, 0));
-                // handleInterpolation(lLegKF[frame], frametime, Model, vec3(0, 1, 0), "Left leg");
+                handleInterpolation(lLegKF[frame], frametime, Model, vec3(0, 1, 0), "Left leg");
                 Model->translate(vec3(-1.0f*dummyMesh[11]->min.x, -1.0f*dummyMesh[11]->min.y, -1.0f*dummyMesh[11]->max.z));
                 setModel(prog, Model);
+                SetMaterial(prog, 2);
                 dummyMesh[11]->draw(prog); // pelvis
                 dummyMesh[10]->draw(prog); // upper leg
 
                 // KEYFRAMES: none, PI/3.0, PI/4.0, none, none, 
                 Model->translate(vec3(1.0f*dummyMesh[9]->max.x, 1.0f*dummyMesh[9]->min.y, 1.0f*dummyMesh[9]->max.z));
                 // Model->rotate(lKneeKF[frame], vec3(0, 1, 0));
-                // handleInterpolation(lKneeKF[frame], frametime, Model, vec3(0, 1, 0), "Left knee");
+                handleInterpolation(lKneeKF[frame], frametime, Model, vec3(0, 1, 0), "Left knee");
                 Model->translate(vec3(-1.0f*dummyMesh[9]->max.x, -1.0f*dummyMesh[9]->min.y, -1.0f*dummyMesh[9]->max.z));
                 setModel(prog, Model);
+                SetMaterial(prog, 2);
                 for (int i=6; i <=9; i++) {
+                    if (i == 6)
+                        SetMaterial(prog, 4);
                     dummyMesh[i]->draw(prog);
                 }
             Model->popMatrix();
@@ -1136,19 +1214,22 @@ public:
                 tmp = findCenter(5);
                 Model->translate(vec3(1.0f*dummyMesh[5]->max.x, 1.0f*dummyMesh[5]->max.y, 1.0f*dummyMesh[5]->max.z));
                 // Model->rotate(rLegKF[frame], vec3(0, 1, 0));
-                // handleInterpolation(rLegKF[frame], frametime, Model, vec3(0, 1, 0), "Right leg");
+                handleInterpolation(rLegKF[frame], frametime, Model, vec3(0, 1, 0), "Right leg");
                 Model->translate(vec3(-1.0f*dummyMesh[5]->max.x, -1.0f*dummyMesh[5]->max.y, -1.0f*dummyMesh[5]->max.z));
                 setModel(prog, Model);
+                SetMaterial(prog, 2);
                 dummyMesh[5]->draw(prog); // pelvis
                 dummyMesh[4]->draw(prog); // upper leg
 
                 // KEYFRAMES: none, none, none, none, PI/3.0
                 Model->translate(vec3(1.0f*dummyMesh[9]->max.x, 1.0f*dummyMesh[9]->min.y, 1.0f*dummyMesh[9]->max.z));
                 // Model->rotate(rKneeKF[frame], vec3(0, 1, 0));
-                // handleInterpolation(rKneeKF[frame], frametime, Model, vec3(0, 1, 0), "Right knee");
+                handleInterpolation(rKneeKF[frame], frametime, Model, vec3(0, 1, 0), "Right knee");
                 Model->translate(vec3(-1.0f*dummyMesh[9]->max.x, -1.0f*dummyMesh[9]->min.y, -1.0f*dummyMesh[9]->max.z));
                 setModel(prog, Model);
                 for (int i=0; i <=3; i++) {
+                    if (i == 0)
+                        SetMaterial(prog, 4);
                     dummyMesh[i]->draw(prog);
                 }
             Model->popMatrix();
@@ -1326,7 +1407,6 @@ public:
             glUniform3f(prog->getUniform("lightPos"), g_eye.x, g_eye.y, g_eye.z);
             glUniform3f(prog->getUniform("D"), gaze.x, gaze.y, gaze.z);
             SetView(prog);
-            SetMaterial(prog, 2);
             drawDummy(Model, prog, frametime);
         prog->unbind();
 
