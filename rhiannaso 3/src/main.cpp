@@ -564,7 +564,7 @@ public:
 		prog->addUniform("MatShine");
         prog->addUniform("D");
 		prog->addUniform("lightPos");
-        // prog->addUniform("moonLight");
+        prog->addUniform("moonLight");
 		prog->addAttribute("vertPos");
 		prog->addAttribute("vertNor");
 
@@ -582,7 +582,7 @@ public:
 		texProg->addUniform("MatShine");
         texProg->addUniform("D");
 		texProg->addUniform("lightPos");
-        // texProg->addUniform("moonLight");
+        texProg->addUniform("moonLight");
 		texProg->addAttribute("vertPos");
 		texProg->addAttribute("vertNor");
 		texProg->addAttribute("vertTex");
@@ -611,7 +611,7 @@ public:
 		progInst->addUniform("MatShine");
         progInst->addUniform("D");
         progInst->addUniform("lightPos");
-        // progInst->addUniform("moonLight");
+        progInst->addUniform("moonLight");
 		progInst->addAttribute("vertPos");
 		progInst->addAttribute("vertNor");
         progInst->addAttribute("vertTex");
@@ -1380,8 +1380,8 @@ public:
             SetView(texProg);
             // glUniform3f(texProg->getUniform("lightPos"), 3.0+lightTrans, 8.0, 7);
             // glUniform3f(texProg->getUniform("lightPos"), g_eye.x, g_eye.y, g_eye.z);
-            // glUniform3f(texProg->getUniform("moonLight"), 10, 10, 10);
-            // glUniform3f(texProg->getUniform("moonLight"), g_eye.x, g_eye.y, g_eye.z);
+            glUniform3f(texProg->getUniform("moonLight"), 10, 10, 10);
+            glUniform3f(texProg->getUniform("moonLight"), g_eye.x, g_eye.y, g_eye.z);
             glUniform3f(texProg->getUniform("lightPos"), dummyLoc.x, dummyLoc.y+camY, dummyLoc.z);
             glUniform3f(texProg->getUniform("D"), dummyLoc.x + gaze.x, dummyLoc.y + gaze.y, dummyLoc.z + gaze.z);
             glUniform1i(texProg->getUniform("flip"), 1);
@@ -1450,8 +1450,8 @@ public:
             glUniformMatrix4fv(progInst->getUniform("P"), 1, GL_FALSE, value_ptr(Projection->topMatrix()));
             SetView(progInst);
             // glUniform3f(progInst->getUniform("lightPos"), g_eye.x, g_eye.y, g_eye.z);
-            // glUniform3f(progInst->getUniform("moonLight"), 10, 10, 10);
-            // glUniform3f(progInst->getUniform("moonLight"), g_eye.x, g_eye.y, g_eye.z);
+            glUniform3f(progInst->getUniform("moonLight"), 10, 10, 10);
+            glUniform3f(progInst->getUniform("moonLight"), g_eye.x, g_eye.y, g_eye.z);
             glUniform3f(progInst->getUniform("lightPos"), dummyLoc.x, dummyLoc.y+camY, dummyLoc.z);
             glUniform3f(progInst->getUniform("D"), dummyLoc.x + gaze.x, dummyLoc.y + gaze.y, dummyLoc.z + gaze.z);
             for (int i=0; i < cubeInst.size(); i++) {   
@@ -1490,8 +1490,8 @@ public:
         prog->bind();
             glUniformMatrix4fv(prog->getUniform("P"), 1, GL_FALSE, value_ptr(Projection->topMatrix()));
             // glUniform3f(prog->getUniform("lightPos"), g_eye.x, g_eye.y, g_eye.z);
-            // glUniform3f(prog->getUniform("moonLight"), 10, 10, 10);
-            // glUniform3f(prog->getUniform("moonLight"), g_eye.x, g_eye.y, g_eye.z);
+            glUniform3f(prog->getUniform("moonLight"), 10, 10, 10);
+            glUniform3f(prog->getUniform("moonLight"), g_eye.x, g_eye.y, g_eye.z);
             glUniform3f(prog->getUniform("lightPos"), dummyLoc.x, dummyLoc.y+camY, dummyLoc.z);
             glUniform3f(prog->getUniform("D"), dummyLoc.x + gaze.x, dummyLoc.y + gaze.y, dummyLoc.z + gaze.z);
             SetView(prog);

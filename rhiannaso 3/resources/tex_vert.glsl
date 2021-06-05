@@ -6,11 +6,11 @@ uniform mat4 P;
 uniform mat4 M;
 uniform mat4 V;
 uniform vec3 lightPos;
-//uniform vec3 moonLight;
+uniform vec3 moonLight;
 
 out vec3 fragNor;
 out vec3 lightDir;
-//out vec3 moonDir;
+out vec3 moonDir;
 out vec3 EPos;
 out vec2 vTexCoord;
 
@@ -22,7 +22,7 @@ void main() {
 
   fragNor = (V*M * vec4(vertNor, 0.0)).xyz;
   lightDir = (V*(vec4(lightPos - wPos, 0.0))).xyz;
-  //moonDir = (V*(vec4(moonLight - wPos, 0.0))).xyz;
+  moonDir = (V*(vec4(moonLight - wPos, 0.0))).xyz;
   EPos = (V * M * vec4(vertPos.xyz, 1.0)).xyz;
   
   /* pass through the texture coordinates to be interpolated */
