@@ -8,6 +8,10 @@
 
 using namespace std;
 
+Keyframe::Keyframe() {
+    
+}
+
 Keyframe::Keyframe(float start, float end, float t, string name) {
     //cout << name << endl;
 	startAngle = start;
@@ -28,9 +32,9 @@ Keyframe::Keyframe(float start, float end, float t, string name) {
 // }
 
 float Keyframe::interpolate(float currTime) {
-    cout << "Start in func: " << startTime << endl;
-    cout << "PART: " << part << endl;
-    cout << "Curr time in func: " << currTime << endl;
+    // cout << "Start in func: " << startTime << endl;
+    // cout << "PART: " << part << endl;
+    // cout << "Curr time in func: " << currTime << endl;
     float percentDone = (currTime-startTime) / duration;
     //cout << percentDone << endl;
     float diff = endAngle - startAngle;

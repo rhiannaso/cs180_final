@@ -13,11 +13,13 @@ class Keyframe
 {
 
 public:
+    Keyframe();
     Keyframe(float start, float end, float t, std::string part);
 	virtual ~Keyframe();
     // void init(float start, float end, float t);
     float returnStart() { return startAngle; }
     float returnEnd() { return endAngle; }
+    float returnDur() { return duration; }
     char* returnPart() { return part; }
     float interpolate(float currTime);
     void setStart(float t) { startTime = t; }

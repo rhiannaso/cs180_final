@@ -70,8 +70,8 @@ public:
     vector<shared_ptr<Shape>> statueMesh;
     vector<shared_ptr<Shape>> statueMesh2;
     vector<shared_ptr<Shape>> axeMesh;
-    vector<vec3> dummyMin;
-    vector<vec3> dummyMax;
+    vec3 dummyMin;
+    vec3 dummyMax;
 
     vector<tinyobj::material_t> houseMat;
     vector<tinyobj::material_t> carMat;
@@ -81,7 +81,10 @@ public:
     float driveTheta = 0;
     //int frame = 0;
     float frameDur = 0.5;
-    float startTime;
+    float startTime = 0;
+    bool isNewFrame = true;
+    int overallFrame = 0;
+    vector<float> limbRot{0, 0, 0, 0, 0, 0};
     // vector<float> lArmKF{0, PI/10.0, PI/8.0, 0, -PI/10.0, -PI/8.0};
     // vector<float> rArmKF{0, PI/10.0, PI/8.0, 0, -PI/10.0, -PI/8.0};
     // vector<float> lLegKF{PI/8.0, PI/10.0, 0, -PI/8.0, -PI/10.0, 0};
@@ -94,8 +97,8 @@ public:
     vector<Keyframe> lKneeKF;
     vector<Keyframe> rLegKF;
     vector<Keyframe> rKneeKF;
-    vector<bool> newFrame{true, true, true, true, true, true};
-    vector<int> frame{0, 0, 0, 0, 0, 0};
+    // vector<bool> newFrame{true, true, true, true, true, true};
+    // vector<int> frame{0, 0, 0, 0, 0, 0};
 
     //skybox data
     vector<std::string> faces {
@@ -151,8 +154,8 @@ public:
 
 	//camera
 	double g_phi, g_theta;
-    // vec3 dummyLoc = vec3(16, -1.25, 30);
-    vec3 dummyLoc = vec3(mapSpaces(0, 17).x, -1.25, mapSpaces(0, 17).z);
+    vec3 dummyLoc = vec3(16, -1.25, 30);
+    // vec3 dummyLoc = vec3(mapSpaces(0, 17).x, -1.25, mapSpaces(0, 17).z);
     float dummyRot = PI/2.0;
 	vec3 view = vec3(0, 0, 1);
 	vec3 strafe = vec3(1, 0, 0);
@@ -378,6 +381,7 @@ public:
         float y = radius*sin(g_phi);
         float z = radius*cos(g_phi)*cos((PI/2.0)-g_theta);
         g_eye = g_lookAt - vec3(x, y, z);
+        gaze = g_eye - g_lookAt;
         // g_lookAt = vec3(x, y, z) + g_eye;
     }
 
@@ -560,6 +564,7 @@ public:
 		prog->addUniform("MatShine");
         prog->addUniform("D");
 		prog->addUniform("lightPos");
+        prog->addUniform("moonLight");
 		prog->addAttribute("vertPos");
 		prog->addAttribute("vertNor");
 
@@ -577,6 +582,7 @@ public:
 		texProg->addUniform("MatShine");
         texProg->addUniform("D");
 		texProg->addUniform("lightPos");
+        texProg->addUniform("moonLight");
 		texProg->addAttribute("vertPos");
 		texProg->addAttribute("vertNor");
 		texProg->addAttribute("vertTex");
@@ -605,6 +611,7 @@ public:
 		progInst->addUniform("MatShine");
         progInst->addUniform("D");
         progInst->addUniform("lightPos");
+        progInst->addUniform("moonLight");
 		progInst->addAttribute("vertPos");
 		progInst->addAttribute("vertNor");
         progInst->addAttribute("vertTex");
@@ -835,8 +842,9 @@ public:
                 tmp->measure();
                 tmp->init();
 
-                dummyMin.push_back(tmp->min);
-                dummyMax.push_back(tmp->max);
+                findMin(tmp->min.x, tmp->min.y, tmp->min.z);
+                findMax(tmp->max.x, tmp->max.y, tmp->max.z);
+
                 dummyMesh.push_back(tmp);
             }
 		}
@@ -872,6 +880,24 @@ public:
 
         initKeyframes();
 	}
+
+    void findMin(float x, float y, float z) {
+        if (x < dummyMin.x)
+            dummyMin.x = x;
+        if (y < dummyMin.y)
+            dummyMin.y = y;
+        if (z < dummyMin.z)
+            dummyMin.z = z;
+    }
+
+    void findMax(float x, float y, float z) {
+        if (x > dummyMax.x)
+            dummyMax.x = x;
+        if (y > dummyMax.y)
+            dummyMax.y = y;
+        if (z > dummyMax.z)
+            dummyMax.z = z;
+    }
 
 	//directly pass quad for the ground to the GPU
 	void initGround() {
@@ -1106,23 +1132,54 @@ public:
         return vec3(x, y, z);
     }
 
-    void handleInterpolation(Keyframe &k, float frametime, shared_ptr<MatrixStack> Model, vec3 axis, string limb, int i) {
-        if (newFrame[i]) {
-            newFrame[i] = false;
-            k.setStart(glfwGetTime());
-            cout << k.returnPart() << endl;
-            // cout << "START: " << glfwGetTime() << endl;
+    void interpolateGroup() {
+        if (isNewFrame) {
+            isNewFrame = false;
+            startTime = glfwGetTime();
         }
-        float angle = k.interpolate(glfwGetTime());
-        if(!k.isDone()){
-            Model->rotate(angle, axis);
+        float currTime = glfwGetTime();
+        float percentDone = (currTime-startTime) / frameDur;
+        if (percentDone > 1) {
+            overallFrame = (++overallFrame)%4;
+            isNewFrame = true;
         } else {
-            // cout << "CHANGING FRAME: " << frame[i] << endl;
-            frame[i] = (++frame[i])%4;
-            newFrame[i] = true;
-            k.resetDone();
+            for (int i=0; i < limbRot.size(); i++) {
+                Keyframe k;
+                if (i == 0)
+                    k = lArmKF[overallFrame];
+                else if (i == 1)
+                    k = rArmKF[overallFrame];
+                else if (i == 2)
+                    k = lLegKF[overallFrame];
+                else if (i == 3)
+                    k = lKneeKF[overallFrame];
+                else if (i == 4)
+                    k = rLegKF[overallFrame];
+                else
+                    k = rKneeKF[overallFrame];
+                float diff = k.returnEnd() - k.returnStart();
+                limbRot[i] = k.returnStart() + (percentDone*diff); 
+            }
         }
     }
+
+    // void handleInterpolation(Keyframe &k, float frametime, shared_ptr<MatrixStack> Model, vec3 axis, string limb, int i) {
+    //     if (newFrame[i]) {
+    //         newFrame[i] = false;
+    //         k.setStart(glfwGetTime());
+    //         cout << k.returnPart() << endl;
+    //         // cout << "START: " << glfwGetTime() << endl;
+    //     }
+    //     float angle = k.interpolate(glfwGetTime());
+    //     if(!k.isDone()){
+    //         Model->rotate(angle, axis);
+    //     } else {
+    //         // cout << "CHANGING FRAME: " << frame[i] << endl;
+    //         frame[i] = (++frame[i])%4;
+    //         newFrame[i] = true;
+    //         k.resetDone();
+    //     }
+    // }
 
     void drawLeftArm(shared_ptr<MatrixStack> Model, shared_ptr<Program> prog, float frametime) {
         // LEFT ARM
@@ -1133,7 +1190,8 @@ public:
             Model->rotate(-PI/2.4, vec3(1, 0, 0));
             // Model->rotate(-PI/8.0, vec3(0, 0, 1));
             // Model->rotate(lArmKF[frame], vec3(0, 0, 1));
-            handleInterpolation(lArmKF[frame[0]], frametime, Model, vec3(0, 0, 1), "Left arm", 0);
+            Model->rotate(limbRot[0], vec3(0, 0, 1));
+            // handleInterpolation(lArmKF[frame[0]], frametime, Model, vec3(0, 0, 1), "Left arm", 0);
             Model->translate(vec3(-1.0f*dummyMesh[21]->min.x, -1.0f*dummyMesh[21]->min.y, -1.0f*dummyMesh[21]->max.z));
             setModel(prog, Model);
             for (int i=21; i <=26; i++) {
@@ -1154,7 +1212,8 @@ public:
             Model->translate(vec3(1.0f*dummyMesh[15]->max.x, 1.0f*dummyMesh[15]->max.y, 1.0f*dummyMesh[15]->max.z));
             Model->rotate(PI/2.4, vec3(1, 0, 0));
             //Model->rotate(-PI/8.0, vec3(0, 0, 1));
-            handleInterpolation(rArmKF[frame[1]], frametime, Model, vec3(0, 0, 1), "Right arm", 1);
+            Model->rotate(limbRot[1], vec3(0, 0, 1));
+            // handleInterpolation(rArmKF[frame[1]], frametime, Model, vec3(0, 0, 1), "Right arm", 1);
             // Model->rotate(rArmKF[frame], vec3(0, 0, 1));
             Model->translate(vec3(-1.0f*dummyMesh[15]->max.x, -1.0f*dummyMesh[15]->max.y, -1.0f*dummyMesh[15]->max.z));
             setModel(prog, Model);
@@ -1174,7 +1233,8 @@ public:
         Model->pushMatrix();
             Model->translate(vec3(1.0f*dummyMesh[11]->min.x, 1.0f*dummyMesh[11]->min.y, 1.0f*dummyMesh[11]->max.z));
             // Model->rotate(lLegKF[frame], vec3(0, 1, 0));
-            handleInterpolation(lLegKF[frame[2]], frametime, Model, vec3(0, 1, 0), "Left leg", 2);
+            Model->rotate(limbRot[2], vec3(0, 1, 0));
+            // handleInterpolation(lLegKF[frame[2]], frametime, Model, vec3(0, 1, 0), "Left leg", 2);
             Model->translate(vec3(-1.0f*dummyMesh[11]->min.x, -1.0f*dummyMesh[11]->min.y, -1.0f*dummyMesh[11]->max.z));
             setModel(prog, Model);
             SetMaterial(prog, 2);
@@ -1184,7 +1244,8 @@ public:
             // KEYFRAMES: none, PI/3.0, PI/4.0, none, none, 
             Model->translate(vec3(1.0f*dummyMesh[9]->max.x, 1.0f*dummyMesh[9]->min.y, 1.0f*dummyMesh[9]->max.z));
             // Model->rotate(lKneeKF[frame], vec3(0, 1, 0));
-            handleInterpolation(lKneeKF[frame[3]], frametime, Model, vec3(0, 1, 0), "Left knee", 3);
+            Model->rotate(limbRot[3], vec3(0, 1, 0));
+            // handleInterpolation(lKneeKF[frame[3]], frametime, Model, vec3(0, 1, 0), "Left knee", 3);
             Model->translate(vec3(-1.0f*dummyMesh[9]->max.x, -1.0f*dummyMesh[9]->min.y, -1.0f*dummyMesh[9]->max.z));
             setModel(prog, Model);
             SetMaterial(prog, 2);
@@ -1202,7 +1263,8 @@ public:
         Model->pushMatrix();
             Model->translate(vec3(1.0f*dummyMesh[5]->max.x, 1.0f*dummyMesh[5]->max.y, 1.0f*dummyMesh[5]->max.z));
             // Model->rotate(rLegKF[frame], vec3(0, 1, 0));
-            handleInterpolation(rLegKF[frame[4]], frametime, Model, vec3(0, 1, 0), "Right leg", 4);
+            Model->rotate(limbRot[4], vec3(0, 1, 0));
+            // handleInterpolation(rLegKF[frame[4]], frametime, Model, vec3(0, 1, 0), "Right leg", 4);
             Model->translate(vec3(-1.0f*dummyMesh[5]->max.x, -1.0f*dummyMesh[5]->max.y, -1.0f*dummyMesh[5]->max.z));
             setModel(prog, Model);
             SetMaterial(prog, 2);
@@ -1212,7 +1274,8 @@ public:
             // KEYFRAMES: none, none, none, none, PI/3.0
             Model->translate(vec3(1.0f*dummyMesh[9]->max.x, 1.0f*dummyMesh[9]->min.y, 1.0f*dummyMesh[9]->max.z));
             // Model->rotate(rKneeKF[frame], vec3(0, 1, 0));
-            handleInterpolation(rKneeKF[frame[5]], frametime, Model, vec3(0, 1, 0), "Right knee", 5);
+            // handleInterpolation(rKneeKF[frame[5]], frametime, Model, vec3(0, 1, 0), "Right knee", 5);
+            Model->rotate(limbRot[5], vec3(0, 1, 0));
             Model->translate(vec3(-1.0f*dummyMesh[9]->max.x, -1.0f*dummyMesh[9]->min.y, -1.0f*dummyMesh[9]->max.z));
             setModel(prog, Model);
             for (int i=0; i <=3; i++) {
@@ -1225,6 +1288,7 @@ public:
 
     void drawDummy(shared_ptr<MatrixStack> Model, shared_ptr<Program> prog, float frametime) {
         //int frame = (int)(glfwGetTime()*5)%6;
+        interpolateGroup();
         Model->pushMatrix();
             Model->translate(vec3(dummyLoc.x, dummyLoc.y, dummyLoc.z));
             Model->scale(vec3(0.01, 0.01, 0.01));
@@ -1315,8 +1379,10 @@ public:
             glUniformMatrix4fv(texProg->getUniform("P"), 1, GL_FALSE, value_ptr(Projection->topMatrix()));
             SetView(texProg);
             // glUniform3f(texProg->getUniform("lightPos"), 3.0+lightTrans, 8.0, 7);
-            glUniform3f(texProg->getUniform("lightPos"), g_eye.x, g_eye.y, g_eye.z);
-            // glUniform3f(texProg->getUniform("lightPos"), dummyLoc.x, dummyLoc.y, dummyLoc.z);
+            // glUniform3f(texProg->getUniform("lightPos"), g_eye.x, g_eye.y, g_eye.z);
+            // glUniform3f(texProg->getUniform("moonLight"), 10, 10, 10);
+            glUniform3f(texProg->getUniform("moonLight"), g_eye.x, g_eye.y, g_eye.z);
+            glUniform3f(texProg->getUniform("lightPos"), dummyLoc.x, dummyLoc.y+camY, dummyLoc.z);
             glUniform3f(texProg->getUniform("D"), gaze.x, gaze.y, gaze.z);
             glUniform1i(texProg->getUniform("flip"), 1);
 
@@ -1383,8 +1449,10 @@ public:
         progInst->bind();
             glUniformMatrix4fv(progInst->getUniform("P"), 1, GL_FALSE, value_ptr(Projection->topMatrix()));
             SetView(progInst);
-            glUniform3f(progInst->getUniform("lightPos"), g_eye.x, g_eye.y, g_eye.z);
-            // glUniform3f(texProg->getUniform("lightPos"), dummyLoc.x, dummyLoc.y, dummyLoc.z);
+            // glUniform3f(progInst->getUniform("lightPos"), g_eye.x, g_eye.y, g_eye.z);
+            // glUniform3f(progInst->getUniform("moonLight"), 10, 10, 10);
+            glUniform3f(progInst->getUniform("moonLight"), g_eye.x, g_eye.y, g_eye.z);
+            glUniform3f(progInst->getUniform("lightPos"), dummyLoc.x, dummyLoc.y+camY, dummyLoc.z);
             glUniform3f(progInst->getUniform("D"), gaze.x, gaze.y, gaze.z);
             for (int i=0; i < cubeInst.size(); i++) {   
                 int mat = cubeInst[i]->getMat()[0];
@@ -1414,15 +1482,17 @@ public:
             Model->popMatrix();
             glBindTexture(GL_TEXTURE_CUBE_MAP, cubeMapTexture);
 
-            //cube->draw(cubeProg);
+            cube->draw(cubeProg);
 
             glDepthFunc(GL_LESS);
         cubeProg->unbind(); 
 
         prog->bind();
             glUniformMatrix4fv(prog->getUniform("P"), 1, GL_FALSE, value_ptr(Projection->topMatrix()));
-            glUniform3f(prog->getUniform("lightPos"), g_eye.x, g_eye.y, g_eye.z);
-            // glUniform3f(texProg->getUniform("lightPos"), dummyLoc.x, dummyLoc.y, dummyLoc.z);
+            // glUniform3f(prog->getUniform("lightPos"), g_eye.x, g_eye.y, g_eye.z);
+            // glUniform3f(prog->getUniform("moonLight"), 10, 10, 10);
+            glUniform3f(prog->getUniform("moonLight"), g_eye.x, g_eye.y, g_eye.z);
+            glUniform3f(prog->getUniform("lightPos"), dummyLoc.x, dummyLoc.y+camY, dummyLoc.z);
             glUniform3f(prog->getUniform("D"), gaze.x, gaze.y, gaze.z);
             SetView(prog);
             drawDummy(Model, prog, frametime);
