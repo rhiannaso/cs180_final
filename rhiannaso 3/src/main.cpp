@@ -164,7 +164,7 @@ public:
     // vec3 g_lookAt = vec3(0, 60, 10);
     float speed = 0.3;
     float camY = 1.75;
-    float camZ = 2;
+    float camZ = 1.4;
     vec3 g_eye = vec3(dummyLoc.x, dummyLoc.y+camY, dummyLoc.z+camZ); // 16, 0, 33
     vec3 g_lookAt = vec3(dummyLoc.x, dummyLoc.y+camY, dummyLoc.z); // 16, 0, 30
     vec3 gaze = g_eye - g_lookAt;
@@ -375,7 +375,7 @@ public:
 
     void computeLookAt() {
         // float radius = 1.0;
-        float radius = 2;
+        float radius = 1.4;
         dummyRot = -g_theta;
         float x = radius*cos(g_phi)*cos(g_theta);
         float y = radius*sin(g_phi);
@@ -564,7 +564,7 @@ public:
 		prog->addUniform("MatShine");
         prog->addUniform("D");
 		prog->addUniform("lightPos");
-        prog->addUniform("moonLight");
+        // prog->addUniform("moonLight");
 		prog->addAttribute("vertPos");
 		prog->addAttribute("vertNor");
 
@@ -582,7 +582,7 @@ public:
 		texProg->addUniform("MatShine");
         texProg->addUniform("D");
 		texProg->addUniform("lightPos");
-        texProg->addUniform("moonLight");
+        // texProg->addUniform("moonLight");
 		texProg->addAttribute("vertPos");
 		texProg->addAttribute("vertNor");
 		texProg->addAttribute("vertTex");
@@ -611,7 +611,7 @@ public:
 		progInst->addUniform("MatShine");
         progInst->addUniform("D");
         progInst->addUniform("lightPos");
-        progInst->addUniform("moonLight");
+        // progInst->addUniform("moonLight");
 		progInst->addAttribute("vertPos");
 		progInst->addAttribute("vertNor");
         progInst->addAttribute("vertTex");
@@ -1381,9 +1381,9 @@ public:
             // glUniform3f(texProg->getUniform("lightPos"), 3.0+lightTrans, 8.0, 7);
             // glUniform3f(texProg->getUniform("lightPos"), g_eye.x, g_eye.y, g_eye.z);
             // glUniform3f(texProg->getUniform("moonLight"), 10, 10, 10);
-            glUniform3f(texProg->getUniform("moonLight"), g_eye.x, g_eye.y, g_eye.z);
+            // glUniform3f(texProg->getUniform("moonLight"), g_eye.x, g_eye.y, g_eye.z);
             glUniform3f(texProg->getUniform("lightPos"), dummyLoc.x, dummyLoc.y+camY, dummyLoc.z);
-            glUniform3f(texProg->getUniform("D"), gaze.x, gaze.y, gaze.z);
+            glUniform3f(texProg->getUniform("D"), dummyLoc.x + gaze.x, dummyLoc.y + gaze.y, dummyLoc.z + gaze.z);
             glUniform1i(texProg->getUniform("flip"), 1);
 
             // Model->pushMatrix();
@@ -1451,9 +1451,9 @@ public:
             SetView(progInst);
             // glUniform3f(progInst->getUniform("lightPos"), g_eye.x, g_eye.y, g_eye.z);
             // glUniform3f(progInst->getUniform("moonLight"), 10, 10, 10);
-            glUniform3f(progInst->getUniform("moonLight"), g_eye.x, g_eye.y, g_eye.z);
+            // glUniform3f(progInst->getUniform("moonLight"), g_eye.x, g_eye.y, g_eye.z);
             glUniform3f(progInst->getUniform("lightPos"), dummyLoc.x, dummyLoc.y+camY, dummyLoc.z);
-            glUniform3f(progInst->getUniform("D"), gaze.x, gaze.y, gaze.z);
+            glUniform3f(progInst->getUniform("D"), dummyLoc.x + gaze.x, dummyLoc.y + gaze.y, dummyLoc.z + gaze.z);
             for (int i=0; i < cubeInst.size(); i++) {   
                 int mat = cubeInst[i]->getMat()[0];
                 SetGenericMat(progInst, treeMat[mat].ambient, treeMat[mat].diffuse, treeMat[mat].specular, treeMat[mat].shininess, "tree");
@@ -1491,9 +1491,9 @@ public:
             glUniformMatrix4fv(prog->getUniform("P"), 1, GL_FALSE, value_ptr(Projection->topMatrix()));
             // glUniform3f(prog->getUniform("lightPos"), g_eye.x, g_eye.y, g_eye.z);
             // glUniform3f(prog->getUniform("moonLight"), 10, 10, 10);
-            glUniform3f(prog->getUniform("moonLight"), g_eye.x, g_eye.y, g_eye.z);
+            // glUniform3f(prog->getUniform("moonLight"), g_eye.x, g_eye.y, g_eye.z);
             glUniform3f(prog->getUniform("lightPos"), dummyLoc.x, dummyLoc.y+camY, dummyLoc.z);
-            glUniform3f(prog->getUniform("D"), gaze.x, gaze.y, gaze.z);
+            glUniform3f(prog->getUniform("D"), dummyLoc.x + gaze.x, dummyLoc.y + gaze.y, dummyLoc.z + gaze.z);
             SetView(prog);
             drawDummy(Model, prog, frametime);
         prog->unbind();
