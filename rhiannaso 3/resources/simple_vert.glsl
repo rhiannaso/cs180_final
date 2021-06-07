@@ -6,9 +6,11 @@ uniform mat4 V;
 uniform mat4 M;
 uniform vec3 lightPos;
 uniform vec3 moonLight;
+uniform vec3 camLight;
 
 out vec3 fragNor;
 out vec3 lightDir;
+out vec3 camDir;
 out vec3 moonDir;
 out vec3 EPos;
 
@@ -17,6 +19,7 @@ void main()
 	gl_Position = P * V * M * vertPos;
 	fragNor = (V*M * vec4(vertNor, 0.0)).xyz;
 	lightDir = vec3(V*(vec4(lightPos - (M*vertPos).xyz, 0.0)));
+    camDir = vec3(V*(vec4(camLight - (M*vertPos).xyz, 0.0)));
     moonDir = vec3(V*(vec4(moonLight - (M*vertPos).xyz, 0.0)));
 	EPos = (V * M * vertPos).xyz;
 }

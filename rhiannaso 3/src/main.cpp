@@ -22,6 +22,8 @@
 #include "stb_image.h"
 #include "Bezier.h"
 #include "Spline.h"
+#include "particleSys.h"
+#include "irrKlang.h"
 
 #define TINYOBJLOADER_IMPLEMENTATION
 #include <tiny_obj_loader/tiny_obj_loader.h>
@@ -31,8 +33,11 @@
 #include <glm/gtc/type_ptr.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 
+#pragma comment(lib, "irrKlang.lib") // link with irrKlang.dll
+
 using namespace std;
 using namespace glm;
+//using namespace irrklang;
 
 class Application : public EventCallbacks
 {
@@ -51,6 +56,8 @@ public:
 	std::shared_ptr<Program> cubeProg;
 
     std::shared_ptr<Program> progInst;
+
+    std::shared_ptr<Program> partProg;
 
 	//our geometry
 	shared_ptr<Shape> sphere;
@@ -78,9 +85,10 @@ public:
     vector<tinyobj::material_t> treeMat;
     map<string, shared_ptr<Texture>> textureMap;
 
+    //animation data
+	float lightTrans = 0;
     float driveTheta = 0;
-    //int frame = 0;
-    float frameDur = 0.5;
+    float frameDur = 0.25;
     float startTime = 0;
     bool isNewFrame = true;
     int overallFrame = 0;
@@ -97,8 +105,7 @@ public:
     vector<Keyframe> lKneeKF;
     vector<Keyframe> rLegKF;
     vector<Keyframe> rKneeKF;
-    // vector<bool> newFrame{true, true, true, true, true, true};
-    // vector<int> frame{0, 0, 0, 0, 0, 0};
+    bool isWalking = false;
 
     //skybox data
     vector<std::string> faces {
@@ -143,9 +150,11 @@ public:
     shared_ptr<Texture> firLeaf;
     shared_ptr<Texture> firTrunk;
     shared_ptr<Texture> axeTex;
+    shared_ptr<Texture> texture;
 
-	//animation data
-	float lightTrans = 0;
+    //the partricle system
+	particleSys *thePartSystem;
+    vec3 leavesPos = vec3(0, 0, 0); // tmp val
 
     int occupancy[31][31] = {0};
     vector<float> positions;
@@ -154,7 +163,7 @@ public:
 
 	//camera
 	double g_phi, g_theta;
-    vec3 dummyLoc = vec3(16, -1.25, 30);
+    vec3 dummyLoc = vec3(16, -1.25, 27.25);
     // vec3 dummyLoc = vec3(mapSpaces(0, 17).x, -1.25, mapSpaces(0, 17).z);
     float dummyRot = PI/2.0;
 	vec3 view = vec3(0, 0, 1);
@@ -176,6 +185,7 @@ public:
     float axe_x[3] = {mapSpaces(11, 15).x, mapSpaces(13, 5).x, mapSpaces(27, 17).x};
     float axe_z[3] = {mapSpaces(11, 15).z, mapSpaces(13, 5).z, mapSpaces(27, 17).z};
     bool axe_taken[3] = {false, false, false};
+    bool isChopping = false;
 
 	Spline splinepath[2];
 	bool goCamera = false;
@@ -195,16 +205,20 @@ public:
 		if (key == GLFW_KEY_Z && action == GLFW_PRESS) {
 			glPolygonMode( GL_FRONT_AND_BACK, GL_LINE );
 		}
+        if (key == GLFW_KEY_X && action == GLFW_PRESS) {
+			dummyLoc = vec3(mapSpaces(27, 16).x, -1.25, mapSpaces(27, 16).z);
+            g_eye = vec3(dummyLoc.x-camZ, dummyLoc.y+camY, dummyLoc.z);
+            g_lookAt = vec3(dummyLoc.x, dummyLoc.y+camY, dummyLoc.z);
+            gaze = g_eye - g_lookAt;
+            computeLookAt();
+		}
         if (key == GLFW_KEY_T && action == GLFW_PRESS) { // Chopping down trees
-            //vec2 tmp = findMySpace(g_eye); // TODO: change to dummyLoc
             vec2 tmp = findMySpace(dummyLoc);
             if (hasAxe > 0 && firstAct) {
-                //vec2 chopLoc = findMySpace(g_lookAt); // TODO: figure out what to change to (maybe dummyLoc + 1 in whatever direction it's facing)
                 vec2 chopLoc = findMySpace(g_lookAt);
                 float i = chopLoc.x;
                 float j = chopLoc.y;
                 vec3 view = g_eye-g_lookAt;
-                // TODO: change to g_lookAt - g_eye
                 cout << "VIEW: " << view.x << endl;
                 cout << "VIEW: " << view.z << endl;
                 view = vec3(round(view.x), round(view.y), round(view.z));
@@ -223,6 +237,10 @@ public:
                 cout << i << endl;
                 cout << j << endl;
                 if (occupancy[(int)i][(int)j] != 0) { // Only act if facing a tree
+                    leavesPos = vec3(mapSpaces(i, j).x, 0.25, mapSpaces(i, j).z);
+                    thePartSystem = new particleSys(leavesPos);
+		            thePartSystem->gpuSetup();
+                    isChopping = true;
                     occupancy[(int)i][(int)j] = 0; // mark as barrier gone
                     modelMatrices[(int)i*31+(int)j] = s; // redraw with tree gone
                     for (int k=0; k < cubeInst.size(); k++) {
@@ -264,6 +282,7 @@ public:
             vec3 tmp = dummyLoc + (speed*view);
             //if (!detectCollision(dummyLoc + (speed*view)) && !detectHeight(dummyLoc + (speed*view))) { // originally g_eye not dummyLoc
             if (!detectCollision(tmp)) {
+                isWalking = true;
                 // dummyLoc = dummyLoc + (speed*view);
                 dummyLoc = vec3(tmp.x, -1.25, tmp.z);
                 // g_eye = g_eye + (speed*view);
@@ -537,6 +556,12 @@ public:
   		axeTex->init();
   		axeTex->setUnit(22);
   		axeTex->setWrapModes(GL_CLAMP_TO_EDGE, GL_CLAMP_TO_EDGE);
+
+        texture = make_shared<Texture>();
+		texture->setFilename(resourceDirectory + "/mask.png");
+		texture->init();
+		texture->setUnit(23);
+		texture->setWrapModes(GL_CLAMP_TO_EDGE, GL_CLAMP_TO_EDGE);
     }
 
 	void init(const std::string& resourceDirectory)
@@ -565,6 +590,7 @@ public:
         prog->addUniform("D");
 		prog->addUniform("lightPos");
         prog->addUniform("moonLight");
+        prog->addUniform("camLight");
 		prog->addAttribute("vertPos");
 		prog->addAttribute("vertNor");
 
@@ -583,6 +609,7 @@ public:
         texProg->addUniform("D");
 		texProg->addUniform("lightPos");
         texProg->addUniform("moonLight");
+        texProg->addUniform("camLight");
 		texProg->addAttribute("vertPos");
 		texProg->addAttribute("vertNor");
 		texProg->addAttribute("vertTex");
@@ -612,15 +639,33 @@ public:
         progInst->addUniform("D");
         progInst->addUniform("lightPos");
         progInst->addUniform("moonLight");
+        progInst->addUniform("camLight");
 		progInst->addAttribute("vertPos");
 		progInst->addAttribute("vertNor");
         progInst->addAttribute("vertTex");
 		progInst->addAttribute("instanceMatrix");
 
+        // Enable z-buffer test.
+		CHECKED_GL_CALL(glEnable(GL_BLEND));
+		CHECKED_GL_CALL(glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA));
+		CHECKED_GL_CALL(glPointSize(24.0f));
+
+        partProg = make_shared<Program>();
+		partProg->setVerbose(true);
+		partProg->setShaderNames(resourceDirectory + "/lab10_vert.glsl", resourceDirectory + "/lab10_frag.glsl");
+		partProg->init();
+		partProg->addUniform("P");
+		partProg->addUniform("M");
+		partProg->addUniform("V");
+		partProg->addUniform("alphaTexture");
+		partProg->addAttribute("vertPos");
+        partProg->addAttribute("pColor");
+
   		// init splines up and down
         splinepath[0] = Spline(glm::vec3(-20,12,-20), glm::vec3(-10,10,-10), glm::vec3(0, 8, 0), glm::vec3(10,6,10), 5);
         splinepath[1] = Spline(glm::vec3(10,6,10), glm::vec3(20,4,20), glm::vec3(25, 2, 30), glm::vec3(16,0,33), 5);
-    
+
+        //engine->play2D("forest.mp3", true); 
 	}
 
     unsigned int createSky(string dir, vector<string> faces) {
@@ -647,7 +692,8 @@ public:
     }
 
     void initKeyframes() {
-        vector<float> arms{0, PI/8.0, 0, -PI/8.0};
+        //vector<float> arms{0, PI/8.0, 0, -PI/8.0};
+        vector<float> arms{-PI/8.0, 0, PI/8.0, 0};
         for (int i=0; i < arms.size(); i++) {
             Keyframe tmp = Keyframe(arms[i], arms[i+1], frameDur, "arm");
             if (i == arms.size()-1)
@@ -873,7 +919,7 @@ public:
             lampMesh->init();
 		}
 
-        cubeMapTexture = createSky("../resources/sky/", faces);
+        cubeMapTexture = createSky("../resources/cloudy/", faces);
 
 		//code to load in the ground plane (CPU defined data passed to GPU)
 		initGround();
@@ -1126,9 +1172,9 @@ public:
     }
 
     vec3 findCenter(int i) {
-        float x = (dummyMesh[i]->max.x - dummyMesh[i]->min.x)/2;
-        float y = (dummyMesh[i]->max.y - dummyMesh[i]->min.y)/2;
-        float z = (dummyMesh[i]->max.z - dummyMesh[i]->min.z)/2;
+        float x = (dummyMesh[i]->max.x + dummyMesh[i]->min.x)/2;
+        float y = (dummyMesh[i]->max.y + dummyMesh[i]->min.y)/2;
+        float z = (dummyMesh[i]->max.z + dummyMesh[i]->min.z)/2;
         return vec3(x, y, z);
     }
 
@@ -1142,6 +1188,8 @@ public:
         if (percentDone > 1) {
             overallFrame = (++overallFrame)%4;
             isNewFrame = true;
+            if (overallFrame == 1 || overallFrame == 3)
+                isWalking = false; 
         } else {
             for (int i=0; i < limbRot.size(); i++) {
                 Keyframe k;
@@ -1163,24 +1211,6 @@ public:
         }
     }
 
-    // void handleInterpolation(Keyframe &k, float frametime, shared_ptr<MatrixStack> Model, vec3 axis, string limb, int i) {
-    //     if (newFrame[i]) {
-    //         newFrame[i] = false;
-    //         k.setStart(glfwGetTime());
-    //         cout << k.returnPart() << endl;
-    //         // cout << "START: " << glfwGetTime() << endl;
-    //     }
-    //     float angle = k.interpolate(glfwGetTime());
-    //     if(!k.isDone()){
-    //         Model->rotate(angle, axis);
-    //     } else {
-    //         // cout << "CHANGING FRAME: " << frame[i] << endl;
-    //         frame[i] = (++frame[i])%4;
-    //         newFrame[i] = true;
-    //         k.resetDone();
-    //     }
-    // }
-
     void drawLeftArm(shared_ptr<MatrixStack> Model, shared_ptr<Program> prog, float frametime) {
         // LEFT ARM
         //  KEYFRAMES X-AXIS: -PI/2.4 (arm to side),
@@ -1188,8 +1218,6 @@ public:
         Model->pushMatrix();
             Model->translate(vec3(1.0f*dummyMesh[21]->min.x, 1.0f*dummyMesh[21]->min.y, 1.0f*dummyMesh[21]->max.z));
             Model->rotate(-PI/2.4, vec3(1, 0, 0));
-            // Model->rotate(-PI/8.0, vec3(0, 0, 1));
-            // Model->rotate(lArmKF[frame], vec3(0, 0, 1));
             Model->rotate(limbRot[0], vec3(0, 0, 1));
             // handleInterpolation(lArmKF[frame[0]], frametime, Model, vec3(0, 0, 1), "Left arm", 0);
             Model->translate(vec3(-1.0f*dummyMesh[21]->min.x, -1.0f*dummyMesh[21]->min.y, -1.0f*dummyMesh[21]->max.z));
@@ -1211,10 +1239,8 @@ public:
         Model->pushMatrix();
             Model->translate(vec3(1.0f*dummyMesh[15]->max.x, 1.0f*dummyMesh[15]->max.y, 1.0f*dummyMesh[15]->max.z));
             Model->rotate(PI/2.4, vec3(1, 0, 0));
-            //Model->rotate(-PI/8.0, vec3(0, 0, 1));
             Model->rotate(limbRot[1], vec3(0, 0, 1));
             // handleInterpolation(rArmKF[frame[1]], frametime, Model, vec3(0, 0, 1), "Right arm", 1);
-            // Model->rotate(rArmKF[frame], vec3(0, 0, 1));
             Model->translate(vec3(-1.0f*dummyMesh[15]->max.x, -1.0f*dummyMesh[15]->max.y, -1.0f*dummyMesh[15]->max.z));
             setModel(prog, Model);
             for (int i=15; i <=20; i++) {
@@ -1232,7 +1258,6 @@ public:
         //  KEYFRAMES: PI/6.0 (leg backward), none (but knee bent), -PI/10.0, -PI/6.0, none,
         Model->pushMatrix();
             Model->translate(vec3(1.0f*dummyMesh[11]->min.x, 1.0f*dummyMesh[11]->min.y, 1.0f*dummyMesh[11]->max.z));
-            // Model->rotate(lLegKF[frame], vec3(0, 1, 0));
             Model->rotate(limbRot[2], vec3(0, 1, 0));
             // handleInterpolation(lLegKF[frame[2]], frametime, Model, vec3(0, 1, 0), "Left leg", 2);
             Model->translate(vec3(-1.0f*dummyMesh[11]->min.x, -1.0f*dummyMesh[11]->min.y, -1.0f*dummyMesh[11]->max.z));
@@ -1243,7 +1268,6 @@ public:
 
             // KEYFRAMES: none, PI/3.0, PI/4.0, none, none, 
             Model->translate(vec3(1.0f*dummyMesh[9]->max.x, 1.0f*dummyMesh[9]->min.y, 1.0f*dummyMesh[9]->max.z));
-            // Model->rotate(lKneeKF[frame], vec3(0, 1, 0));
             Model->rotate(limbRot[3], vec3(0, 1, 0));
             // handleInterpolation(lKneeKF[frame[3]], frametime, Model, vec3(0, 1, 0), "Left knee", 3);
             Model->translate(vec3(-1.0f*dummyMesh[9]->max.x, -1.0f*dummyMesh[9]->min.y, -1.0f*dummyMesh[9]->max.z));
@@ -1252,6 +1276,8 @@ public:
             for (int i=6; i <=9; i++) {
                 if (i == 6)
                     SetMaterial(prog, 4);
+                else
+                    SetMaterial(prog, 2);
                 dummyMesh[i]->draw(prog);
             }
         Model->popMatrix();
@@ -1262,7 +1288,6 @@ public:
         //  KEYFRAMES: -PI/6.0 (leg forward), none, none, PI/6.0, none (but knee bent)
         Model->pushMatrix();
             Model->translate(vec3(1.0f*dummyMesh[5]->max.x, 1.0f*dummyMesh[5]->max.y, 1.0f*dummyMesh[5]->max.z));
-            // Model->rotate(rLegKF[frame], vec3(0, 1, 0));
             Model->rotate(limbRot[4], vec3(0, 1, 0));
             // handleInterpolation(rLegKF[frame[4]], frametime, Model, vec3(0, 1, 0), "Right leg", 4);
             Model->translate(vec3(-1.0f*dummyMesh[5]->max.x, -1.0f*dummyMesh[5]->max.y, -1.0f*dummyMesh[5]->max.z));
@@ -1273,7 +1298,6 @@ public:
 
             // KEYFRAMES: none, none, none, none, PI/3.0
             Model->translate(vec3(1.0f*dummyMesh[9]->max.x, 1.0f*dummyMesh[9]->min.y, 1.0f*dummyMesh[9]->max.z));
-            // Model->rotate(rKneeKF[frame], vec3(0, 1, 0));
             // handleInterpolation(rKneeKF[frame[5]], frametime, Model, vec3(0, 1, 0), "Right knee", 5);
             Model->rotate(limbRot[5], vec3(0, 1, 0));
             Model->translate(vec3(-1.0f*dummyMesh[9]->max.x, -1.0f*dummyMesh[9]->min.y, -1.0f*dummyMesh[9]->max.z));
@@ -1281,14 +1305,16 @@ public:
             for (int i=0; i <=3; i++) {
                 if (i == 0)
                     SetMaterial(prog, 4);
+                else
+                    SetMaterial(prog, 2);
                 dummyMesh[i]->draw(prog);
             }
         Model->popMatrix();
     }
 
     void drawDummy(shared_ptr<MatrixStack> Model, shared_ptr<Program> prog, float frametime) {
-        //int frame = (int)(glfwGetTime()*5)%6;
-        interpolateGroup();
+        if (isWalking)
+            interpolateGroup();
         Model->pushMatrix();
             Model->translate(vec3(dummyLoc.x, dummyLoc.y, dummyLoc.z));
             Model->scale(vec3(0.01, 0.01, 0.01));
@@ -1315,10 +1341,21 @@ public:
         Model->popMatrix();
     }
 
+    // void drawFireflies(shared_ptr<MatrixStack> Model, shared_ptr<Program> prog) {
+    //     Model->pushMatrix();        
+    //         //for (int i=12; i <= 14; i++) {
+    //             Model->translate(vec3(dummyLoc.x, dummyLoc.y, dummyLoc.z+1));
+    //             Model->scale(vec3(1, 1, 1));
+    //             setModel(prog, Model);
+    //             sphere->draw(prog);
+    //         //}
+    //     Model->popMatrix();
+    // }
+
    	void updateUsingCameraPath(float frametime)  {
 
    	  if (goCamera) {
-        g_lookAt = vec3(16, 0, 30);
+        g_lookAt = vec3(dummyLoc.x, dummyLoc.y+camY, dummyLoc.z);
         if(!splinepath[0].isDone()){
        		splinepath[0].update(frametime);
             g_eye = splinepath[0].getPosition();
@@ -1380,8 +1417,9 @@ public:
             SetView(texProg);
             // glUniform3f(texProg->getUniform("lightPos"), 3.0+lightTrans, 8.0, 7);
             // glUniform3f(texProg->getUniform("lightPos"), g_eye.x, g_eye.y, g_eye.z);
-            glUniform3f(texProg->getUniform("moonLight"), 10, 10, 10);
-            glUniform3f(texProg->getUniform("moonLight"), g_eye.x, g_eye.y, g_eye.z);
+            //glUniform3f(texProg->getUniform("moonLight"), 10, 10, 10);
+            glUniform3f(texProg->getUniform("moonLight"), 0, 8, 0);
+            glUniform3f(texProg->getUniform("camLight"), g_eye.x, g_eye.y, g_eye.z);
             glUniform3f(texProg->getUniform("lightPos"), dummyLoc.x, dummyLoc.y+camY, dummyLoc.z);
             glUniform3f(texProg->getUniform("D"), dummyLoc.x + gaze.x, dummyLoc.y + gaze.y, dummyLoc.z + gaze.z);
             glUniform1i(texProg->getUniform("flip"), 1);
@@ -1450,8 +1488,9 @@ public:
             glUniformMatrix4fv(progInst->getUniform("P"), 1, GL_FALSE, value_ptr(Projection->topMatrix()));
             SetView(progInst);
             // glUniform3f(progInst->getUniform("lightPos"), g_eye.x, g_eye.y, g_eye.z);
-            glUniform3f(progInst->getUniform("moonLight"), 10, 10, 10);
-            glUniform3f(progInst->getUniform("moonLight"), g_eye.x, g_eye.y, g_eye.z);
+            //glUniform3f(progInst->getUniform("moonLight"), 10, 10, 10);
+            glUniform3f(progInst->getUniform("moonLight"), 0, 8, 0);
+            glUniform3f(progInst->getUniform("camLight"), g_eye.x, g_eye.y, g_eye.z);
             glUniform3f(progInst->getUniform("lightPos"), dummyLoc.x, dummyLoc.y+camY, dummyLoc.z);
             glUniform3f(progInst->getUniform("D"), dummyLoc.x + gaze.x, dummyLoc.y + gaze.y, dummyLoc.z + gaze.z);
             for (int i=0; i < cubeInst.size(); i++) {   
@@ -1490,13 +1529,27 @@ public:
         prog->bind();
             glUniformMatrix4fv(prog->getUniform("P"), 1, GL_FALSE, value_ptr(Projection->topMatrix()));
             // glUniform3f(prog->getUniform("lightPos"), g_eye.x, g_eye.y, g_eye.z);
-            glUniform3f(prog->getUniform("moonLight"), 10, 10, 10);
-            glUniform3f(prog->getUniform("moonLight"), g_eye.x, g_eye.y, g_eye.z);
+            //glUniform3f(prog->getUniform("moonLight"), 10, 10, 10);
+            glUniform3f(prog->getUniform("moonLight"), 0, 8, 0);
+            glUniform3f(prog->getUniform("camLight"), g_eye.x, g_eye.y, g_eye.z);
             glUniform3f(prog->getUniform("lightPos"), dummyLoc.x, dummyLoc.y+camY, dummyLoc.z);
             glUniform3f(prog->getUniform("D"), dummyLoc.x + gaze.x, dummyLoc.y + gaze.y, dummyLoc.z + gaze.z);
             SetView(prog);
             drawDummy(Model, prog, frametime);
         prog->unbind();
+
+        if(isChopping) {
+            partProg->bind();
+                texture->bind(partProg->getUniform("alphaTexture"));
+                CHECKED_GL_CALL(glUniformMatrix4fv(partProg->getUniform("P"), 1, GL_FALSE, value_ptr(Projection->topMatrix())));
+                SetView(partProg);
+                glUniformMatrix4fv(partProg->getUniform("M"), 1, GL_FALSE, value_ptr(Model->topMatrix()));
+                
+                thePartSystem->drawMe(partProg);
+                thePartSystem->update();
+
+            partProg->unbind();
+        }
 
 		// Pop matrix stacks.
 		Projection->popMatrix();
@@ -1523,6 +1576,8 @@ int main(int argc, char *argv[])
 	windowManager->init(640, 480);
 	windowManager->setEventCallbacks(application);
 	application->windowManager = windowManager;
+
+    //ISoundEngine* engine = createIrrKlangDevice();
 
 	// This is the code that will likely change program to program as you
 	// may need to initialize or set up different data and state
@@ -1558,6 +1613,7 @@ int main(int argc, char *argv[])
 		// Poll for and process events.
 		glfwPollEvents();
 	}
+    //engine->drop();
 
 	// Quit program.
 	windowManager->shutdown();
