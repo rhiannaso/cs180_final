@@ -60,16 +60,12 @@ public:
 
 	//our geometry
 	shared_ptr<Shape> sphere;
-
-	shared_ptr<Shape> theDog;
-
 	shared_ptr<Shape> cube;
-
     shared_ptr<Shape> cubeTex;
-    vector<shared_ptr<ShapeInst>> cubeInst;
 
-    shared_ptr<Shape> roadObj;
-    shared_ptr<Shape> lampMesh;
+    vector<shared_ptr<ShapeInst>> trees;
+    vector<shared_ptr<ShapeInst>> treeShadows;
+
     vector<shared_ptr<Shape>> houseMesh;
     vector<shared_ptr<Shape>> carMesh;
     vector<shared_ptr<Shape>> dummyMesh;
@@ -152,6 +148,7 @@ public:
     shared_ptr<Texture> spruceTrunk;
     shared_ptr<Texture> axeTex;
     shared_ptr<Texture> texture;
+    shared_ptr<Texture> shadowTex;
 
     //the partricle system
 	particleSys *thePartSystem;
@@ -160,6 +157,7 @@ public:
     int occupancy[31][31] = {0};
     vector<float> positions;
     glm::mat4 *modelMatrices;
+    glm::mat4 *modelMatrices2;
     vector<vec2> choppedTrees;
 
 	//camera
@@ -172,7 +170,6 @@ public:
     float camY = 1.8;
     float camZ = 1.4;
     vec3 g_eye = vec3(-20, 12, -20);
-    //vec3 g_eye = vec3(dummyLoc.x, dummyLoc.y+camY, dummyLoc.z+camZ); // 16, 0, 33
     vec3 g_lookAt = vec3(dummyLoc.x, dummyLoc.y+camY, dummyLoc.z); // 16, 0, 30
     vec3 gaze = g_eye - g_lookAt;
 
@@ -244,9 +241,12 @@ public:
                 mat4 t1 = glm::translate(glm::mat4(1.0f), glm::vec3(tmp.x, tmp.y, tmp.z));
                 mat4 r = glm::rotate(glm::mat4(1.0f), (float)(-PI/2), vec3(1, 0, 0));
                 mat4 s = glm::scale(glm::mat4(1.0f), glm::vec3(0.45));
+                mat4 s2 = glm::scale(glm::mat4(1.0f), glm::vec3(0.425, 0.425, 0.00001));
                 modelMatrices[(int)spot.x*31+(int)spot.y] = t1*r*s;
-                for (int j=0; j < cubeInst.size(); j++) {
-                    cubeInst[j]->update(modelMatrices);
+                modelMatrices2[(int)spot.x*31+(int)spot.y] = t1*r*s2;
+                for (int j=0; j < trees.size(); j++) {
+                    trees[j]->update(modelMatrices);
+                    treeShadows[j]->update(modelMatrices2);
                 }
             }
             choppedTrees.clear();
@@ -277,8 +277,6 @@ public:
                 float i = chopLoc.x;
                 float j = chopLoc.y;
                 vec3 view = g_eye-g_lookAt;
-                // cout << "VIEW: " << view.x << endl;
-                // cout << "VIEW: " << view.z << endl;
                 view = vec3(round(view.x), round(view.y), round(view.z));
                 mat4 s = glm::scale(glm::mat4(1.0f), glm::vec3(0.0));
                 if (view.x > 0) {
@@ -292,8 +290,6 @@ public:
                         i += 1;
                     }
                 }
-                // cout << i << endl;
-                // cout << j << endl;
                 if (occupancy[(int)i][(int)j] != 0) { // Only act if facing a tree
                     choppedTrees.push_back(vec2(i, j));
                     leavesPos = vec3(mapSpaces(i, j).x, 0.25, mapSpaces(i, j).z);
@@ -302,8 +298,10 @@ public:
                     isChopping = true;
                     occupancy[(int)i][(int)j] = 0; // mark as barrier gone
                     modelMatrices[(int)i*31+(int)j] = s; // redraw with tree gone
-                    for (int k=0; k < cubeInst.size(); k++) {
-                        cubeInst[k]->update(modelMatrices);
+                    modelMatrices2[(int)i*31+(int)j] = s; // redraw with shadow gone
+                    for (int k=0; k < trees.size(); k++) {
+                        trees[k]->update(modelMatrices);
+                        treeShadows[k]->update(modelMatrices2);
                     }
                     cout << "Chopping" << endl;
                     hasAxe -= 1;
@@ -342,12 +340,9 @@ public:
             vec3 tmp = dummyLoc + (speed*view);
             if (!detectCollision(tmp) && !lostGame) {
                 isWalking = true;
-                // dummyLoc = dummyLoc + (speed*view);
                 dummyLoc = vec3(tmp.x, -1.25, tmp.z);
-                // g_eye = g_eye + (speed*view);
                 g_lookAt = vec3(dummyLoc.x, dummyLoc.y+camY, dummyLoc.z);
                 computeLookAt();
-                // g_lookAt = g_lookAt + (speed*view);
             }
 		}
         if (key == GLFW_KEY_A && action == GLFW_PRESS){
@@ -358,7 +353,6 @@ public:
                 dummyLoc = dummyLoc - (speed*strafe);
                 g_eye = g_eye - (speed*strafe);
                 g_lookAt = vec3(dummyLoc.x, dummyLoc.y+camY, dummyLoc.z);
-                // g_lookAt = g_lookAt - (speed*strafe);
             }
 		}
         if (key == GLFW_KEY_S && action == GLFW_PRESS){
@@ -366,12 +360,9 @@ public:
             vec3 tmp = dummyLoc - (speed*view);
             if (!detectCollision(tmp) && !lostGame) {
                 isWalking = true;
-                // dummyLoc = dummyLoc - (speed*view);
                 dummyLoc = vec3(tmp.x, -1.25, tmp.z);
-                // g_eye = g_eye - (speed*view);
                 g_lookAt = vec3(dummyLoc.x, dummyLoc.y+camY, dummyLoc.z);
                 computeLookAt();
-                // g_lookAt = g_lookAt - (speed*view);
             }
 		}
         if (key == GLFW_KEY_D && action == GLFW_PRESS){
@@ -382,7 +373,6 @@ public:
                 dummyLoc = dummyLoc + (speed*strafe);
                 g_eye = g_eye + (speed*strafe);
                 g_lookAt = vec3(dummyLoc.x, dummyLoc.y+camY, dummyLoc.z);
-                // g_lookAt = g_lookAt + (speed*strafe);
             }
 		}
 	}
@@ -444,7 +434,6 @@ public:
     }
 
     void computeLookAt() {
-        // float radius = 1.0;
         float radius = 1.4;
         dummyRot = -g_theta;
         float x = radius*cos(g_phi)*cos(g_theta);
@@ -452,7 +441,6 @@ public:
         float z = radius*cos(g_phi)*cos((PI/2.0)-g_theta);
         g_eye = g_lookAt - vec3(x, y, z);
         gaze = g_eye - g_lookAt;
-        // g_lookAt = vec3(x, y, z) + g_eye;
     }
 
 	void resizeCallback(GLFWwindow *window, int width, int height)
@@ -488,13 +476,6 @@ public:
   		bumpBrick->setUnit(3);
   		bumpBrick->setWrapModes(GL_CLAMP_TO_EDGE, GL_CLAMP_TO_EDGE);
         textureMap.insert(pair<string, shared_ptr<Texture>>("campiangatebrick1_bump.jpg", bumpBrick));
-
-        // whiteText = make_shared<Texture>();
-  		// whiteText->setFilename(resourceDirectory + "/brickHouse/HighBuild_texture.jpg");
-  		// whiteText->init();
-  		// whiteText->setUnit(4);
-  		// whiteText->setWrapModes(GL_CLAMP_TO_EDGE, GL_CLAMP_TO_EDGE);
-        // textureMap.insert(pair<string, shared_ptr<Texture>>("HighBuild_texture.jpg", whiteText));
 
         tiles = make_shared<Texture>();
   		tiles->setFilename(resourceDirectory + "/brickHouse/panTiles_1024_more_red.jpg");
@@ -559,6 +540,12 @@ public:
 		texture->init();
 		texture->setUnit(14);
 		texture->setWrapModes(GL_CLAMP_TO_EDGE, GL_CLAMP_TO_EDGE);
+
+        shadowTex = make_shared<Texture>();
+  		shadowTex->setFilename(resourceDirectory + "/shadowTex.jpg");
+  		shadowTex->init();
+  		shadowTex->setUnit(15);
+  		shadowTex->setWrapModes(GL_CLAMP_TO_EDGE, GL_CLAMP_TO_EDGE);
     }
 
 	void init(const std::string& resourceDirectory)
@@ -807,6 +794,7 @@ public:
 
         float numSlots = 961;
         modelMatrices = new glm::mat4[numSlots];
+        modelMatrices2 = new glm::mat4[numSlots];
         float rowSize = 31.0f;
 		for(int i = 0; i < numSlots/rowSize ; i++) {
 			for (int j=0; j < (int)rowSize; j++) {
@@ -815,12 +803,16 @@ public:
     			mat4 t1 = glm::translate(glm::mat4(1.0f), glm::vec3(tmp.x, tmp.y, tmp.z));
                 mat4 r = glm::rotate(glm::mat4(1.0f), (float)(-PI/2), vec3(1, 0, 0));
                 mat4 s;
+                mat4 s2;
                 if (occupancy[i][j] == 1) {
     			    s = glm::scale(glm::mat4(1.0f), glm::vec3(0.45));
+                    s2 = glm::scale(glm::mat4(1.0f), glm::vec3(0.425, 0.425, 0.00001));
                 } else {
                     s = glm::scale(glm::mat4(1.0f), glm::vec3(0.0));
+                    s2 = glm::scale(glm::mat4(1.0f), glm::vec3(0.0));
                 }
     			modelMatrices[i*(int)rowSize+j] = t1*r*s;
+                modelMatrices2[i*(int)rowSize+j] = t1*r*s2;
     	  	}
 		}
 
@@ -835,7 +827,14 @@ public:
       			s->measure();
       			s->init(modelMatrices);
 
-      			cubeInst.push_back(s);
+      			trees.push_back(s);
+
+                shared_ptr<ShapeInst> s2 = make_shared<ShapeInst>(numSlots);
+      			s2->createShape(TOshapes[i]);
+      			s2->measure();
+      			s2->init(modelMatrices2);
+
+                treeShadows.push_back(s2);
     		}
   		}
 
@@ -879,16 +878,6 @@ public:
                 
                 houseMesh.push_back(tmp);
             }
-		}
-
-        rc = tinyobj::LoadObj(TOshapes, objMaterials, errStr, (resourceDirectory + "/streetlamp.obj").c_str());
-		if (!rc) {
-			cerr << errStr << endl;
-		} else {
-            lampMesh = make_shared<Shape>();
-            lampMesh->createShape(TOshapes[0]);
-            lampMesh->measure();
-            lampMesh->init();
 		}
 
         cubeMapTexture = createSky("../resources/cloudy/", faces);
@@ -974,6 +963,7 @@ public:
      void drawGround(shared_ptr<Program> curS) {
      	curS->bind();
      	glBindVertexArray(GroundVertexArrayID);
+        glUniform1f(curS->getUniform("MatShine"), 3.0);
      	dirt->bind(curS->getUniform("Texture0"));
 		//draw the ground plane 
   		SetModel(vec3(0, -1, 0), 0, 0, 1, curS);
@@ -1075,7 +1065,6 @@ public:
         Model->pushMatrix();
             Model->pushMatrix();
                 vec3 pos = mapSpaces(0, 17);
-                //Model->translate(vec3(0, -1.25, -7));
                 Model->translate(vec3(pos.x, -1.25, pos.z - 10));
                 Model->scale(vec3(0.35, 0.35, 0.35));
 
@@ -1281,7 +1270,6 @@ public:
         Model->pushMatrix();
             vec3 pos = mapSpaces(0, 17);
             Model->translate(vec3(pos.x, -0.5, pos.z - 4));
-            //Model->translate(vec3(2.7, -0.85, 2));
             Model->translate(vec3(driveTheta, 0, 0));
             Model->rotate(PI/2.0, vec3(0, 1, 0));
             Model->scale(vec3(0.55, 0.55, 0.55));
@@ -1394,45 +1382,6 @@ public:
             glUniform3f(texProg->getUniform("D"), dummyLoc.x + gaze.x, dummyLoc.y + gaze.y, dummyLoc.z + gaze.z);
             glUniform1i(texProg->getUniform("flip"), 1);
 
-            // Model->pushMatrix();
-            //     Model->translate(vec3(14.5, -1.25, 31.25));
-            //     Model->rotate(-PI/2, vec3(0, 1, 0));
-            //     Model->scale(vec3(0.0125, 0.0125, 0.0125));
-            //     statueTex2->bind(texProg->getUniform("Texture0"));
-            //     glUniformMatrix4fv(texProg->getUniform("M"), 1, GL_FALSE, value_ptr(Model->topMatrix()));
-            //     for (int i=0; i < statueMesh.size(); i++) {
-            //         statueMesh2[i]->draw(texProg);
-            //     }
-            // Model->popMatrix();
-
-            // Model->pushMatrix();
-            //     Model->translate(vec3(17.5, -1.25, 31.25));
-            //     Model->rotate(-PI/2, vec3(0, 1, 0));
-            //     Model->scale(vec3(0.0125, 0.0125, 0.0125));
-            //     statueTex2->bind(texProg->getUniform("Texture0"));
-            //     glUniformMatrix4fv(texProg->getUniform("M"), 1, GL_FALSE, value_ptr(Model->topMatrix()));
-            //     for (int i=0; i < statueMesh.size(); i++) {
-            //         statueMesh2[i]->draw(texProg);
-            //     }
-            // Model->popMatrix();
-
-            //drawHouse(Model, texProg);
-
-            // hedge->bind(texProg->getUniform("Texture0"));
-            // for (int i=0; i < 31; i++) {
-            //     for (int j=0; j < 31; j++) {
-            //         if (occupancy[i][j] == 1) {
-            //             vec3 tmp = mapSpaces(i, j);
-            //             Model->pushMatrix();
-            //             Model->translate(vec3(tmp.x, 0, tmp.z));
-            //             Model->scale(vec3(2, 2, 2));
-            //             glUniformMatrix4fv(texProg->getUniform("M"), 1, GL_FALSE, value_ptr(Model->topMatrix()));
-            //             cubeTex->draw(texProg);
-            //             Model->popMatrix();
-            //         }
-            //     }
-            // }
-
             for (unsigned int j=0; j < 3; j++) {
                 Model->pushMatrix();
                     Model->translate(vec3(axe_x[j], 0, axe_z[j]));
@@ -1460,13 +1409,15 @@ public:
             glUniform3f(progInst->getUniform("camLight"), g_eye.x, g_eye.y, g_eye.z);
             glUniform3f(progInst->getUniform("lightPos"), dummyLoc.x, dummyLoc.y+camY, dummyLoc.z);
             glUniform3f(progInst->getUniform("D"), dummyLoc.x + gaze.x, dummyLoc.y + gaze.y, dummyLoc.z + gaze.z);
-            for (int i=0; i < cubeInst.size(); i++) {   
-                int mat = cubeInst[i]->getMat()[0];
+            for (int i=0; i < trees.size(); i++) {   
+                int mat = trees[i]->getMat()[0];
                 SetGenericMat(progInst, treeMat[mat].ambient, treeMat[mat].diffuse, treeMat[mat].specular, treeMat[mat].shininess, "tree");
                 if (treeMat[mat].diffuse_texname != "") {
                     textureMap.at(treeMat[mat].diffuse_texname)->bind(progInst->getUniform("Texture0"));
                 }
-                cubeInst[i]->draw(progInst);
+                trees[i]->draw(progInst);
+                shadowTex->bind(progInst->getUniform("Texture0"));
+                treeShadows[i]->draw(progInst);
             }
 		progInst->unbind();
 
