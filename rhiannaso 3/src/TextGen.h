@@ -25,7 +25,7 @@ class TextGen
 	};
 
 	public:
-		TextGen(FT_Library *ft, const shared_ptr<Program> prog);
+		TextGen(FT_Library *ft, const shared_ptr<Program> prog, int mode);
 		~TextGen() {}
 		void init();
 		void drawText(int alignment, std::string text, GLfloat x, GLfloat y, GLfloat scale, glm::vec3 color);

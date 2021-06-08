@@ -1,14 +1,19 @@
 #include "TextGen.h"
 
-TextGen::TextGen(FT_Library *ft, const shared_ptr<Program> prog)
+TextGen::TextGen(FT_Library *ft, const shared_ptr<Program> prog, int mode)
 {
 	this->prog = prog;
 	if (FT_Init_FreeType(ft))
 	    std::cout << "ERROR::FREETYPE: Could not init FreeType Library" << std::endl;
 
 	FT_Face face;
-	if (FT_New_Face(*ft, "../fonts/roboto.ttf", 0, &face))
-	    std::cout << "ERROR::FREETYPE: Failed to load font" << std::endl; 
+    if (mode == 1) {
+        if (FT_New_Face(*ft, "../fonts/roboto.ttf", 0, &face))
+            std::cout << "ERROR::FREETYPE: Failed to load font" << std::endl; 
+    } else {
+        if (FT_New_Face(*ft, "../fonts/oswald.ttf", 0, &face))
+            std::cout << "ERROR::FREETYPE: Failed to load font" << std::endl; 
+    }
 	FT_Set_Pixel_Sizes(face, 0, 48);  
 	glPixelStorei(GL_UNPACK_ALIGNMENT, 1); // Disable byte-alignment restriction
 	

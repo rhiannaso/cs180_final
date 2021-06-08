@@ -23,7 +23,6 @@
 #include "Bezier.h"
 #include "Spline.h"
 #include "particleSys.h"
-#include "irrKlang.h"
 #include "TextGen.h"
 
 #define TINYOBJLOADER_IMPLEMENTATION
@@ -34,11 +33,8 @@
 #include <glm/gtc/type_ptr.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 
-#pragma comment(lib, "irrKlang.lib") // link with irrKlang.dll
-
 using namespace std;
 using namespace glm;
-//using namespace irrklang;
 
 class Application : public EventCallbacks
 {
@@ -112,6 +108,7 @@ public:
     // freetext
     FT_Library ft;
     TextGen* writer;
+    TextGen* headWriter;
     bool gameOver = false;
     bool lostGame = false;
     bool startScreen = true;
@@ -492,12 +489,12 @@ public:
   		bumpBrick->setWrapModes(GL_CLAMP_TO_EDGE, GL_CLAMP_TO_EDGE);
         textureMap.insert(pair<string, shared_ptr<Texture>>("campiangatebrick1_bump.jpg", bumpBrick));
 
-        whiteText = make_shared<Texture>();
-  		whiteText->setFilename(resourceDirectory + "/brickHouse/HighBuild_texture.jpg");
-  		whiteText->init();
-  		whiteText->setUnit(4);
-  		whiteText->setWrapModes(GL_CLAMP_TO_EDGE, GL_CLAMP_TO_EDGE);
-        textureMap.insert(pair<string, shared_ptr<Texture>>("HighBuild_texture.jpg", whiteText));
+        // whiteText = make_shared<Texture>();
+  		// whiteText->setFilename(resourceDirectory + "/brickHouse/HighBuild_texture.jpg");
+  		// whiteText->init();
+  		// whiteText->setUnit(4);
+  		// whiteText->setWrapModes(GL_CLAMP_TO_EDGE, GL_CLAMP_TO_EDGE);
+        // textureMap.insert(pair<string, shared_ptr<Texture>>("HighBuild_texture.jpg", whiteText));
 
         tiles = make_shared<Texture>();
   		tiles->setFilename(resourceDirectory + "/brickHouse/panTiles_1024_more_red.jpg");
@@ -596,7 +593,6 @@ public:
 		prog->addAttribute("vertPos");
 		prog->addAttribute("vertNor");
 
-
 		// Initialize the GLSL program that we will use for texture mapping
 		texProg = make_shared<Program>();
 		texProg->setVerbose(true);
@@ -656,7 +652,8 @@ public:
         glyphProg->addUniform("textColor");
         glyphProg->addAttribute("vertex");
         
-        writer = new TextGen(&ft, glyphProg);
+        writer = new TextGen(&ft, glyphProg, 1);
+        headWriter = new TextGen(&ft, glyphProg, 2);
 
         // Enable z-buffer test.
 		CHECKED_GL_CALL(glEnable(GL_BLEND));
@@ -678,7 +675,6 @@ public:
         splinepath[0] = Spline(glm::vec3(-20,12,-20), glm::vec3(-10,10,-10), glm::vec3(0, 8, 0), glm::vec3(10,6,10), 3);
         splinepath[1] = Spline(glm::vec3(10,6,10), glm::vec3(20,4,20), glm::vec3(25, 2, 30), glm::vec3(16,-1.25+camY,27.25+camZ), 3);
 
-        //engine->play2D("forest.mp3", true); 
 	}
 
     unsigned int createSky(string dir, vector<string> faces) {
@@ -1510,29 +1506,33 @@ public:
             glm::mat4 projection = glm::ortho(0.0f, static_cast<GLfloat>(width), 0.0f, static_cast<GLfloat>(height));
             glUniformMatrix4fv(glyphProg->getUniform("P"), 1, GL_FALSE, value_ptr(projection));
             if (startScreen) {
-                writer->drawText(1, "Escape the Forest", width/2, height/2+85.0f, 1.0f, glm::vec3(1.0f, 1.0f, 1.0f));
-                writer->drawText(1, "Select Mode (Press 1 or 2):", width/2, height/2-20.0f, 0.45f, glm::vec3(1.0f, 1.0f, 1.0f));
+                headWriter->drawText(1, "ESCAPE THE FOREST", width/2, height/2+75.0f, 1.0f, glm::vec3(1.0f, 1.0f, 1.0f));
+                writer->drawText(1, "Select Mode:", width/2, height/2-20.0f, 0.45f, glm::vec3(1.0f, 1.0f, 1.0f));
                 writer->drawText(1, "Explore Mode (1): See if you can escape the maze!", width/2, height/2-45.0f, 0.35f, glm::vec3(1.0f, 1.0f, 1.0f));
                 writer->drawText(1, "Timed Mode (2): See if you can escape the maze before time runs out!", width/2, height/2-65.0f, 0.35f, glm::vec3(1.0f, 1.0f, 1.0f));
+                headWriter->drawText(1, "PRESS 1 OR 2 TO START", width/2, height/2-120.0f, 0.5f, glm::vec3(1.0f, 1.0f, 1.0f));
             } else {
                 if (gameOver) {
-                    writer->drawText(1, "You Won!", width/2, height/2+85.0f, 1.0f, glm::vec3(1.0f, 1.0f, 1.0f));
+                    headWriter->drawText(1, "YOU WON!", width/2, height/2+85.0f, 1.0f, glm::vec3(1.0f, 1.0f, 1.0f));
                     if (timedGame){
                         writer->drawText(1, "Time Left: "+formatTime(), width/2, height/2+60.0f, 0.35f, glm::vec3(1.0f, 1.0f, 1.0f));
                     } else {
                         writer->drawText(1, "Time Taken: "+formatTime(), width/2, height/2+60.0f, 0.35f, glm::vec3(1.0f, 1.0f, 1.0f));
                     }
-                    writer->drawText(1, "Press R to restart", width/2, height/2+10.0f, 0.45f, glm::vec3(1.0f, 1.0f, 1.0f));
+                    headWriter->drawText(1, "PRESS R TO RESTART", width/2, height/2+10.0f, 0.45f, glm::vec3(1.0f, 1.0f, 1.0f));
                 } else {
-                    writer->drawText(1, "Axes: "+std::to_string(hasAxe), 50.0f, 10.0f, 0.5f, glm::vec3(1.0f, 1.0f, 1.0f));
+                    headWriter->drawText(1, "AXES: "+std::to_string(hasAxe), 50.0f, 10.0f, 0.5f, glm::vec3(1.0f, 1.0f, 1.0f));
                 }
                 if (timedGame) {
                     if (lostGame) {
-                        writer->drawText(1, "You Lost :(", width/2, height/2+85.0f, 1.0f, glm::vec3(1.0f, 1.0f, 1.0f));
+                        headWriter->drawText(1, "YOU LOST :(", width/2, height/2+85.0f, 1.0f, glm::vec3(1.0f, 1.0f, 1.0f));
                         writer->drawText(1, "You didn't finish the maze before the time was up.", width/2, height/2+60.0f, 0.35f, glm::vec3(1.0f, 1.0f, 1.0f));
-                        writer->drawText(1, "Press R to restart", width/2, height/2+10.0f, 0.45f, glm::vec3(1.0f, 1.0f, 1.0f));
+                        headWriter->drawText(1, "PRESS R TO RESTART", width/2, height/2+10.0f, 0.45f, glm::vec3(1.0f, 1.0f, 1.0f));
                     } else {
-                        writer->drawText(1, formatTime(), 600.0f, 10.0f, 0.5f, glm::vec3(1.0f, 1.0f, 1.0f));
+                        if (timer <= 10)
+                            headWriter->drawText(1, formatTime(), 600.0f, 10.0f, 0.5f, glm::vec3(0.9f, 0.2f, 0.2f));
+                        else
+                            headWriter->drawText(1, formatTime(), 600.0f, 10.0f, 0.5f, glm::vec3(1.0f, 1.0f, 1.0f));
                     }
                 }
             }
@@ -1579,8 +1579,6 @@ int main(int argc, char *argv[])
 	windowManager->setEventCallbacks(application);
 	application->windowManager = windowManager;
 
-    //ISoundEngine* engine = createIrrKlangDevice();
-
 	// This is the code that will likely change program to program as you
 	// may need to initialize or set up different data and state
 
@@ -1615,7 +1613,6 @@ int main(int argc, char *argv[])
 		// Poll for and process events.
 		glfwPollEvents();
 	}
-    //engine->drop();
 
 	// Quit program.
 	windowManager->shutdown();
