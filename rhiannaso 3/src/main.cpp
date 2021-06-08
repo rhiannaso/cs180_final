@@ -24,6 +24,7 @@
 #include "Spline.h"
 #include "particleSys.h"
 #include "irrKlang.h"
+#include "TextGen.h"
 
 #define TINYOBJLOADER_IMPLEMENTATION
 #include <tiny_obj_loader/tiny_obj_loader.h>
@@ -58,6 +59,8 @@ public:
     std::shared_ptr<Program> progInst;
 
     std::shared_ptr<Program> partProg;
+
+    std::shared_ptr<Program> glyphProg;
 
 	//our geometry
 	shared_ptr<Shape> sphere;
@@ -106,6 +109,16 @@ public:
     vector<Keyframe> rLegKF;
     vector<Keyframe> rKneeKF;
     bool isWalking = false;
+
+    // freetext
+    FT_Library ft;
+    TextGen* writer;
+    bool gameOver = false;
+    bool startScreen = true;
+    float gameStart = 0;
+    float gameEnd = 0;
+
+    string rDir; // resource directory
 
     //skybox data
     vector<std::string> faces {
@@ -160,11 +173,11 @@ public:
     vector<float> positions;
     glm::mat4 *modelMatrices;
     int numWalls = 0;
+    vector<vec2> choppedTrees;
 
 	//camera
 	double g_phi, g_theta;
     vec3 dummyLoc = vec3(16, -1.25, 27.25);
-    // vec3 dummyLoc = vec3(mapSpaces(0, 17).x, -1.25, mapSpaces(0, 17).z);
     float dummyRot = PI/2.0;
 	vec3 view = vec3(0, 0, 1);
 	vec3 strafe = vec3(1, 0, 0);
@@ -174,7 +187,8 @@ public:
     float speed = 0.3;
     float camY = 1.75;
     float camZ = 1.4;
-    vec3 g_eye = vec3(dummyLoc.x, dummyLoc.y+camY, dummyLoc.z+camZ); // 16, 0, 33
+    vec3 g_eye = vec3(-20, 12, -20);
+    //vec3 g_eye = vec3(dummyLoc.x, dummyLoc.y+camY, dummyLoc.z+camZ); // 16, 0, 33
     vec3 g_lookAt = vec3(dummyLoc.x, dummyLoc.y+camY, dummyLoc.z); // 16, 0, 30
     vec3 gaze = g_eye - g_lookAt;
 
@@ -205,13 +219,52 @@ public:
 		if (key == GLFW_KEY_Z && action == GLFW_PRESS) {
 			glPolygonMode( GL_FRONT_AND_BACK, GL_LINE );
 		}
-        if (key == GLFW_KEY_X && action == GLFW_PRESS) {
-			dummyLoc = vec3(mapSpaces(27, 16).x, -1.25, mapSpaces(27, 16).z);
-            g_eye = vec3(dummyLoc.x-camZ, dummyLoc.y+camY, dummyLoc.z);
+        if (key == GLFW_KEY_V && action == GLFW_PRESS) { // Show finish
+            dummyLoc = vec3(mapSpaces(0, 17).x, -1.25, mapSpaces(0, 17).z);
+            g_eye = vec3(dummyLoc.x, dummyLoc.y+camY, dummyLoc.z+camZ);
             g_lookAt = vec3(dummyLoc.x, dummyLoc.y+camY, dummyLoc.z);
             gaze = g_eye - g_lookAt;
+            g_theta = -PI/2.0;
             computeLookAt();
 		}
+        if (key == GLFW_KEY_X && action == GLFW_PRESS) { // Show axe functionality
+			dummyLoc = vec3(mapSpaces(27, 16).x, -1.25, mapSpaces(27, 16).z);
+            g_eye = vec3(dummyLoc.x, dummyLoc.y+camY, dummyLoc.z+camZ);
+            g_lookAt = vec3(dummyLoc.x, dummyLoc.y+camY, dummyLoc.z);
+            gaze = g_eye - g_lookAt;
+            g_theta = 0;
+            computeLookAt();
+		}
+        if (key == GLFW_KEY_R && action == GLFW_PRESS) { // Restart
+            dummyLoc = vec3(16, -1.25, 27.25);
+            g_eye = vec3(dummyLoc.x, dummyLoc.y+camY, dummyLoc.z+camZ);
+            g_lookAt = vec3(dummyLoc.x, dummyLoc.y+camY, dummyLoc.z);
+            gaze = g_eye - g_lookAt;
+            for (int i=0; i < 3; i++) {
+                axe_taken[i] = false;
+                axe_scale[i] = 0.001;
+            }
+            isChopping = false;
+            readMaze(rDir);
+            firstAct = true;
+            hasAxe = 0;
+            gameOver = false;
+            startScreen = true;
+            overallFrame = 0;
+            gameStart = glfwGetTime();
+            for (int k=0; k < choppedTrees.size(); k++) { // Reset any chopped trees
+                vec2 spot = choppedTrees[k];
+                vec3 tmp = mapSpaces(spot.x, spot.y);
+                mat4 t1 = glm::translate(glm::mat4(1.0f), glm::vec3(tmp.x, tmp.y, tmp.z));
+                mat4 r = glm::rotate(glm::mat4(1.0f), (float)(-PI/2), vec3(1, 0, 0));
+                mat4 s = glm::scale(glm::mat4(1.0f), glm::vec3(0.45));
+                modelMatrices[(int)spot.x*31+(int)spot.y] = t1*r*s;
+                for (int j=0; j < cubeInst.size(); j++) {
+                    cubeInst[j]->update(modelMatrices);
+                }
+            }
+            choppedTrees.clear();
+        }
         if (key == GLFW_KEY_T && action == GLFW_PRESS) { // Chopping down trees
             vec2 tmp = findMySpace(dummyLoc);
             if (hasAxe > 0 && firstAct) {
@@ -219,8 +272,8 @@ public:
                 float i = chopLoc.x;
                 float j = chopLoc.y;
                 vec3 view = g_eye-g_lookAt;
-                cout << "VIEW: " << view.x << endl;
-                cout << "VIEW: " << view.z << endl;
+                // cout << "VIEW: " << view.x << endl;
+                // cout << "VIEW: " << view.z << endl;
                 view = vec3(round(view.x), round(view.y), round(view.z));
                 mat4 s = glm::scale(glm::mat4(1.0f), glm::vec3(0.0));
                 if (view.x > 0) {
@@ -234,9 +287,10 @@ public:
                         i += 1;
                     }
                 }
-                cout << i << endl;
-                cout << j << endl;
+                // cout << i << endl;
+                // cout << j << endl;
                 if (occupancy[(int)i][(int)j] != 0) { // Only act if facing a tree
+                    choppedTrees.push_back(vec2(i, j));
                     leavesPos = vec3(mapSpaces(i, j).x, 0.25, mapSpaces(i, j).z);
                     thePartSystem = new particleSys(leavesPos);
 		            thePartSystem->gpuSetup();
@@ -273,6 +327,7 @@ public:
             firstAct = true;
 		}
 		if (key == GLFW_KEY_G && action == GLFW_RELEASE) {
+            startScreen = false;
 			goCamera = !goCamera;
             if (!goCamera)
                 computeLookAt();
@@ -295,6 +350,7 @@ public:
             view = g_lookAt - g_eye;
             strafe = cross(view, vec3(0, 1, 0));
             if (!detectCollision(dummyLoc - (speed*strafe))) {
+                isWalking = true;
                 dummyLoc = dummyLoc - (speed*strafe);
                 g_eye = g_eye - (speed*strafe);
                 g_lookAt = vec3(dummyLoc.x, dummyLoc.y+camY, dummyLoc.z);
@@ -306,6 +362,7 @@ public:
             vec3 tmp = dummyLoc - (speed*view);
             //if (!detectCollision(dummyLoc - (speed*view)) && !detectHeight(dummyLoc - (speed*view))) {
             if (!detectCollision(tmp)) {
+                isWalking = true;
                 // dummyLoc = dummyLoc - (speed*view);
                 dummyLoc = vec3(tmp.x, -1.25, tmp.z);
                 // g_eye = g_eye - (speed*view);
@@ -318,6 +375,7 @@ public:
             view = g_lookAt - g_eye;
             strafe = cross(view, vec3(0, 1, 0));
             if (!detectCollision(dummyLoc + (speed*strafe))) {
+                isWalking = true;
                 dummyLoc = dummyLoc + (speed*strafe);
                 g_eye = g_eye + (speed*strafe);
                 g_lookAt = vec3(dummyLoc.x, dummyLoc.y+camY, dummyLoc.z);
@@ -337,6 +395,11 @@ public:
 
     bool detectCollision(vec3 myPos) {
         vec2 occPos = findMySpace(myPos);
+        if (occPos.x < 0) {
+            gameOver = true;
+            gameEnd = glfwGetTime();
+            return true;
+        }
         if (occPos.x > 30 || occPos.y > 30 || occPos.y < 0) // If beyond the bounds of the maze
             return true;
         if (occupancy[(int)occPos.x][(int)occPos.y] != 1) // If not a wall
@@ -373,7 +436,7 @@ public:
 
 
 	void scrollCallback(GLFWwindow* window, double deltaX, double deltaY) {
-        if (!goCamera) {
+        if (!goCamera && !startScreen) {
             g_theta -= deltaX/100;
             if (g_phi < DegToRad(60) && g_phi > -DegToRad(80)) {
                 g_phi += deltaY/100;
@@ -568,12 +631,15 @@ public:
 	{
 		GLSL::checkVersion();
 
+        rDir = resourceDirectory;
+
 		// Set background color.
 		glClearColor(.72f, .84f, 1.06f, 1.0f);
 		// Enable z-buffer test.
 		glEnable(GL_DEPTH_TEST);
 
 		g_theta = -PI/2.0;
+        gameStart = glfwGetTime();
 
 		// Initialize the GLSL program that we will use for local shading
 		prog = make_shared<Program>();
@@ -645,6 +711,17 @@ public:
         progInst->addAttribute("vertTex");
 		progInst->addAttribute("instanceMatrix");
 
+        glyphProg = make_shared<Program>();
+		glyphProg->setVerbose(true);
+        glyphProg->setShaderNames(resourceDirectory + "/glyph_vert.glsl", resourceDirectory + "/glyph_frag.glsl");
+		glyphProg->init();
+        glyphProg->addUniform("P");
+        glyphProg->addUniform("text");
+        glyphProg->addUniform("textColor");
+        glyphProg->addAttribute("vertex");
+        
+        writer = new TextGen(&ft, glyphProg);
+
         // Enable z-buffer test.
 		CHECKED_GL_CALL(glEnable(GL_BLEND));
 		CHECKED_GL_CALL(glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA));
@@ -662,8 +739,8 @@ public:
         partProg->addAttribute("pColor");
 
   		// init splines up and down
-        splinepath[0] = Spline(glm::vec3(-20,12,-20), glm::vec3(-10,10,-10), glm::vec3(0, 8, 0), glm::vec3(10,6,10), 5);
-        splinepath[1] = Spline(glm::vec3(10,6,10), glm::vec3(20,4,20), glm::vec3(25, 2, 30), glm::vec3(16,0,33), 5);
+        splinepath[0] = Spline(glm::vec3(-20,12,-20), glm::vec3(-10,10,-10), glm::vec3(0, 8, 0), glm::vec3(10,6,10), 3);
+        splinepath[1] = Spline(glm::vec3(10,6,10), glm::vec3(20,4,20), glm::vec3(25, 2, 30), glm::vec3(16,0,33), 3);
 
         //engine->play2D("forest.mp3", true); 
 	}
@@ -1362,6 +1439,10 @@ public:
         } else {
             splinepath[1].update(frametime);
             g_eye = splinepath[1].getPosition();
+            if (splinepath[1].isDone()) {
+                g_eye = vec3(dummyLoc.x, dummyLoc.y+camY, dummyLoc.z+camZ);
+                goCamera = false;
+            }
         }
       }
    	}
@@ -1389,6 +1470,16 @@ public:
         }
     }
 
+    string formatTime() {
+        float totalTime = gameEnd - gameStart;
+        int min = totalTime/60;
+        int sec = (int)totalTime%60;
+        if (sec < 10)
+            return std::to_string(min)+":0"+std::to_string(sec);
+        else
+            return std::to_string(min)+":"+std::to_string(sec);
+    }
+
 	void render(float frametime) {
 		// Get current frame buffer size.
 		int width, height;
@@ -1406,7 +1497,8 @@ public:
 		auto Model = make_shared<MatrixStack>();
 
 		//update the camera position
-		updateUsingCameraPath(frametime);
+        if (!startScreen)
+		    updateUsingCameraPath(frametime);
 
 		// Apply perspective projection.
 		Projection->pushMatrix();
@@ -1446,7 +1538,7 @@ public:
             //     }
             // Model->popMatrix();
 
-            drawHouse(Model, texProg);
+            //drawHouse(Model, texProg);
             // drawLamps(Model, texProg);
 
             // hedge->bind(texProg->getUniform("Texture0"));
@@ -1538,6 +1630,25 @@ public:
             drawDummy(Model, prog, frametime);
         prog->unbind();
 
+        glEnable(GL_BLEND);
+        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA); 
+
+        glyphProg->bind();
+            glm::mat4 projection = glm::ortho(0.0f, static_cast<GLfloat>(width), 0.0f, static_cast<GLfloat>(height));
+            glUniformMatrix4fv(glyphProg->getUniform("P"), 1, GL_FALSE, value_ptr(projection));
+            if (startScreen) {
+                writer->drawText(1, "Escape the Forest", width/2, height/2+85.0f, 1.0f, glm::vec3(1.0f, 1.0f, 1.0f));
+                writer->drawText(1, "Press G to Start", width/2, height/2+50.0f, 0.45f, glm::vec3(1.0f, 1.0f, 1.0f));
+            } else {
+                writer->drawText(1, "Axes: "+std::to_string(hasAxe), 50.0f, 10.0f, 0.5f, glm::vec3(1.0f, 1.0f, 1.0f));
+                if (gameOver) {
+                    writer->drawText(1, "You Won!", width/2, height/2+85.0f, 1.0f, glm::vec3(1.0f, 1.0f, 1.0f));
+                    writer->drawText(1, "Time Taken: "+formatTime(), width/2, height/2+60.0f, 0.35f, glm::vec3(1.0f, 1.0f, 1.0f));
+                    writer->drawText(1, "Press R to restart", width/2, height/2+10.0f, 0.45f, glm::vec3(1.0f, 1.0f, 1.0f));
+                }
+            }
+        glyphProg->unbind();
+
         if(isChopping) {
             partProg->bind();
                 texture->bind(partProg->getUniform("alphaTexture"));
@@ -1550,6 +1661,8 @@ public:
 
             partProg->unbind();
         }
+
+        glDisable(GL_BLEND);
 
 		// Pop matrix stacks.
 		Projection->popMatrix();
