@@ -77,7 +77,6 @@ public:
     vector<shared_ptr<Shape>> houseMesh;
     vector<shared_ptr<Shape>> carMesh;
     vector<shared_ptr<Shape>> dummyMesh;
-    vector<shared_ptr<Shape>> statueMesh;
     vector<shared_ptr<Shape>> statueMesh2;
     vector<shared_ptr<Shape>> axeMesh;
     vec3 dummyMin;
@@ -117,7 +116,7 @@ public:
     bool lostGame = false;
     bool startScreen = true;
     bool timedGame = false;
-    float timer = 20; // 7.5 minutes
+    float timer = 300; // 5 minutes
     float gameStart = 0;
     float gameEnd = 0;
 
@@ -141,30 +140,19 @@ public:
 	GLuint GroundVertexArrayID;
 
 	//the image to use as a texture (ground)
-	shared_ptr<Texture> texture0;
-	shared_ptr<Texture> brownWood;
     shared_ptr<Texture> brick;
     shared_ptr<Texture> blackText;
     shared_ptr<Texture> lightWood;
-    shared_ptr<Texture> leaf;
-    shared_ptr<Texture> road;
     shared_ptr<Texture> bumpBrick;
     shared_ptr<Texture> whiteText;
     shared_ptr<Texture> tiles;
     shared_ptr<Texture> stone;
-    shared_ptr<Texture> lamp;
     shared_ptr<Texture> whiteWood;
     shared_ptr<Texture> glass;
-    shared_ptr<Texture> bark;
-    shared_ptr<Texture> bigLeaf;
-    shared_ptr<Texture> hedge;
     shared_ptr<Texture> dirt;
-    shared_ptr<Texture> statueTex;
     shared_ptr<Texture> statueTex2;
     shared_ptr<Texture> spruceLeaf;
     shared_ptr<Texture> spruceTrunk;
-    shared_ptr<Texture> firLeaf;
-    shared_ptr<Texture> firTrunk;
     shared_ptr<Texture> axeTex;
     shared_ptr<Texture> texture;
 
@@ -175,7 +163,6 @@ public:
     int occupancy[31][31] = {0};
     vector<float> positions;
     glm::mat4 *modelMatrices;
-    int numWalls = 0;
     vector<vec2> choppedTrees;
 
 	//camera
@@ -184,9 +171,6 @@ public:
     float dummyRot = PI/2.0;
 	vec3 view = vec3(0, 0, 1);
 	vec3 strafe = vec3(1, 0, 0);
-    // vec3 g_eye = vec3(mapSpaces(11, 15).x, 0, mapSpaces(11, 15).z);
-    // vec3 g_eye = vec3(0, 0, 0);
-    // vec3 g_lookAt = vec3(0, 60, 10);
     float speed = 0.3;
     float camY = 1.8;
     float camZ = 1.4;
@@ -239,10 +223,13 @@ public:
             computeLookAt();
 		}
         if (key == GLFW_KEY_R && action == GLFW_PRESS) { // Restart
+            goCamera = false;
             dummyLoc = vec3(16, -1.25, 27.25);
             g_eye = vec3(-20, 12, -20);
             g_lookAt = vec3(dummyLoc.x, dummyLoc.y+camY, dummyLoc.z);
             gaze = g_eye - g_lookAt;
+            splinepath[0] = Spline(glm::vec3(-20,12,-20), glm::vec3(-10,10,-10), glm::vec3(0, 8, 0), glm::vec3(10,6,10), 3);
+            splinepath[1] = Spline(glm::vec3(10,6,10), glm::vec3(20,4,20), glm::vec3(25, 2, 30), glm::vec3(16,-1.25+camY,27.25+camZ), 3);
             for (int i=0; i < 3; i++) {
                 axe_taken[i] = false;
                 axe_scale[i] = 0.001;
@@ -267,11 +254,10 @@ public:
             }
             choppedTrees.clear();
             lostGame = false;
-            timer = 20;
+            timer = 300;
             g_phi = 0;
             g_theta = -PI/2;
-            splinepath[0] = Spline(glm::vec3(-20,12,-20), glm::vec3(-10,10,-10), glm::vec3(0, 8, 0), glm::vec3(10,6,10), 3);
-            splinepath[1] = Spline(glm::vec3(10,6,10), glm::vec3(20,4,20), glm::vec3(25, 2, 30), glm::vec3(16,-1.25+camY,27.25+camZ), 3);
+            dummyRot = PI/2.0;
         }
         if (key == GLFW_KEY_1 && action == GLFW_PRESS) { // Explore game mode
             timedGame = false;
@@ -357,7 +343,6 @@ public:
         if (key == GLFW_KEY_W && action == GLFW_PRESS){
 			view = g_lookAt - g_eye;
             vec3 tmp = dummyLoc + (speed*view);
-            //if (!detectCollision(dummyLoc + (speed*view)) && !detectHeight(dummyLoc + (speed*view))) { // originally g_eye not dummyLoc
             if (!detectCollision(tmp) && !lostGame) {
                 isWalking = true;
                 // dummyLoc = dummyLoc + (speed*view);
@@ -382,7 +367,6 @@ public:
         if (key == GLFW_KEY_S && action == GLFW_PRESS){
 			view = g_lookAt - g_eye;
             vec3 tmp = dummyLoc - (speed*view);
-            //if (!detectCollision(dummyLoc - (speed*view)) && !detectHeight(dummyLoc - (speed*view))) {
             if (!detectCollision(tmp) && !lostGame) {
                 isWalking = true;
                 // dummyLoc = dummyLoc - (speed*view);
@@ -429,21 +413,6 @@ public:
         else
             return true;
     }
-
-    // bool detectHeight(vec3 myPos) {
-    //     // if (thirdP) {
-    //         if (myPos.y > -0.9 || myPos.y < -1.35)
-    //             return true;
-    //         else
-    //             return false;
-    //     // } else {
-    //     //     if (myPos.y > 0.5 || myPos.y < -0.05)
-    //     //         return true;
-    //     //     else
-    //     //         return false;
-    //     // }
-
-    // }
 
 	void mouseCallback(GLFWwindow *window, int button, int action, int mods)
 	{
@@ -496,156 +465,102 @@ public:
 
     void setTextures(const std::string& resourceDirectory) {
         //read in a load the texture
-		texture0 = make_shared<Texture>();
-  		texture0->setFilename(resourceDirectory + "/grass_low.jpg");
-  		texture0->init();
-  		texture0->setUnit(0);
-  		texture0->setWrapModes(GL_REPEAT, GL_REPEAT);
-
-  		brownWood = make_shared<Texture>();
-  		brownWood->setFilename(resourceDirectory + "/cartoonWood.jpg");
-  		brownWood->init();
-  		brownWood->setUnit(1);
-  		brownWood->setWrapModes(GL_CLAMP_TO_EDGE, GL_CLAMP_TO_EDGE);
-
         brick = make_shared<Texture>();
   		brick->setFilename(resourceDirectory + "/brickHouse/campiangatebrick1.jpg");
   		brick->init();
-  		brick->setUnit(2);
+  		brick->setUnit(0);
   		brick->setWrapModes(GL_REPEAT, GL_REPEAT);
         textureMap.insert(pair<string, shared_ptr<Texture>>("campiangatebrick1.jpg", brick));
 
         blackText = make_shared<Texture>();
   		blackText->setFilename(resourceDirectory + "/brickHouse/063.jpg");
   		blackText->init();
-  		blackText->setUnit(3);
+  		blackText->setUnit(1);
   		blackText->setWrapModes(GL_CLAMP_TO_EDGE, GL_CLAMP_TO_EDGE);
         textureMap.insert(pair<string, shared_ptr<Texture>>("063.JPG", blackText));
 
         lightWood = make_shared<Texture>();
   		lightWood->setFilename(resourceDirectory + "/brown_wood.jpg");
   		lightWood->init();
-  		lightWood->setUnit(4);
+  		lightWood->setUnit(2);
   		lightWood->setWrapModes(GL_CLAMP_TO_EDGE, GL_CLAMP_TO_EDGE);
-
-        leaf = make_shared<Texture>();
-  		leaf->setFilename(resourceDirectory + "/tree/maple_leaf.png");
-  		leaf->init();
-  		leaf->setUnit(5);
-  		leaf->setWrapModes(GL_CLAMP_TO_EDGE, GL_CLAMP_TO_EDGE);
-
-        road = make_shared<Texture>();
-  		road->setFilename(resourceDirectory + "/driveway2.jpg");
-  		road->init();
-  		road->setUnit(6);
-  		road->setWrapModes(GL_REPEAT, GL_REPEAT);
 
         bumpBrick = make_shared<Texture>();
   		bumpBrick->setFilename(resourceDirectory + "/brickHouse/campiangatebrick1_bump.jpg");
   		bumpBrick->init();
-  		bumpBrick->setUnit(7);
+  		bumpBrick->setUnit(3);
   		bumpBrick->setWrapModes(GL_CLAMP_TO_EDGE, GL_CLAMP_TO_EDGE);
         textureMap.insert(pair<string, shared_ptr<Texture>>("campiangatebrick1_bump.jpg", bumpBrick));
 
         whiteText = make_shared<Texture>();
   		whiteText->setFilename(resourceDirectory + "/brickHouse/HighBuild_texture.jpg");
   		whiteText->init();
-  		whiteText->setUnit(8);
+  		whiteText->setUnit(4);
   		whiteText->setWrapModes(GL_CLAMP_TO_EDGE, GL_CLAMP_TO_EDGE);
         textureMap.insert(pair<string, shared_ptr<Texture>>("HighBuild_texture.jpg", whiteText));
 
         tiles = make_shared<Texture>();
   		tiles->setFilename(resourceDirectory + "/brickHouse/panTiles_1024_more_red.jpg");
   		tiles->init();
-  		tiles->setUnit(9);
+  		tiles->setUnit(5);
   		tiles->setWrapModes(GL_REPEAT, GL_REPEAT);
         textureMap.insert(pair<string, shared_ptr<Texture>>("panTiles_1024_more_red.jpg", tiles));
 
         stone = make_shared<Texture>();
   		stone->setFilename(resourceDirectory + "/brickHouse/stones006x04.jpg");
   		stone->init();
-  		stone->setUnit(10);
+  		stone->setUnit(6);
   		stone->setWrapModes(GL_CLAMP_TO_EDGE, GL_CLAMP_TO_EDGE);
         textureMap.insert(pair<string, shared_ptr<Texture>>("stones006x04.jpg", stone));
-
-        lamp = make_shared<Texture>();
-  		lamp->setFilename(resourceDirectory + "/diffuse_streetlamp.jpg");
-  		lamp->init();
-  		lamp->setUnit(11);
-  		lamp->setWrapModes(GL_CLAMP_TO_EDGE, GL_CLAMP_TO_EDGE);
 
         whiteWood = make_shared<Texture>();
   		whiteWood->setFilename(resourceDirectory + "/white_wood.jpg");
   		whiteWood->init();
-  		whiteWood->setUnit(12);
+  		whiteWood->setUnit(7);
   		whiteWood->setWrapModes(GL_REPEAT, GL_REPEAT);
 
         glass = make_shared<Texture>();
   		glass->setFilename(resourceDirectory + "/glass.jpg");
   		glass->init();
-  		glass->setUnit(13);
+  		glass->setUnit(8);
   		glass->setWrapModes(GL_CLAMP_TO_EDGE, GL_CLAMP_TO_EDGE);
-
-        hedge = make_shared<Texture>();
-  		hedge->setFilename(resourceDirectory + "/hedge.jpg");
-  		hedge->init();
-  		hedge->setUnit(14);
-  		hedge->setWrapModes(GL_CLAMP_TO_EDGE, GL_CLAMP_TO_EDGE);
 
         dirt = make_shared<Texture>();
   		dirt->setFilename(resourceDirectory + "/ground.jpg");
   		dirt->init();
-  		dirt->setUnit(15);
+  		dirt->setUnit(9);
   		dirt->setWrapModes(GL_REPEAT, GL_REPEAT);
-
-        statueTex = make_shared<Texture>();
-  		statueTex->setFilename(resourceDirectory + "/statue/statue.jpg");
-  		statueTex->init();
-  		statueTex->setUnit(16);
-  		statueTex->setWrapModes(GL_CLAMP_TO_EDGE, GL_CLAMP_TO_EDGE);
 
         statueTex2 = make_shared<Texture>();
   		statueTex2->setFilename(resourceDirectory + "/statue2/mm_facade_sculpture_03_diffus.jpg");
   		statueTex2->init();
-  		statueTex2->setUnit(17);
+  		statueTex2->setUnit(10);
   		statueTex2->setWrapModes(GL_CLAMP_TO_EDGE, GL_CLAMP_TO_EDGE);
 
         spruceLeaf = make_shared<Texture>();
   		spruceLeaf->setFilename(resourceDirectory + "/Spruce_obj/Spruce_branches.png");
   		spruceLeaf->init();
-  		spruceLeaf->setUnit(18);
+  		spruceLeaf->setUnit(11);
   		spruceLeaf->setWrapModes(GL_REPEAT, GL_REPEAT);
         textureMap.insert(pair<string, shared_ptr<Texture>>("Spruce_branches.png", spruceLeaf));
 
         spruceTrunk = make_shared<Texture>();
   		spruceTrunk->setFilename(resourceDirectory + "/Spruce_obj/Spruce_trunk.jpeg");
   		spruceTrunk->init();
-  		spruceTrunk->setUnit(19);
+  		spruceTrunk->setUnit(12);
   		spruceTrunk->setWrapModes(GL_REPEAT, GL_REPEAT);
         textureMap.insert(pair<string, shared_ptr<Texture>>("Spruce_trunk.jpeg", spruceTrunk));
-
-        firLeaf = make_shared<Texture>();
-  		firLeaf->setFilename(resourceDirectory + "/fir/branch.png");
-  		firLeaf->init();
-  		firLeaf->setUnit(20);
-  		firLeaf->setWrapModes(GL_REPEAT, GL_REPEAT);
-
-        firTrunk = make_shared<Texture>();
-  		firTrunk->setFilename(resourceDirectory + "/fir/bark.jpg");
-  		firTrunk->init();
-  		firTrunk->setUnit(21);
-  		firTrunk->setWrapModes(GL_REPEAT, GL_REPEAT);
 
         axeTex = make_shared<Texture>();
   		axeTex->setFilename(resourceDirectory + "/axe/axe.png");
   		axeTex->init();
-  		axeTex->setUnit(22);
+  		axeTex->setUnit(13);
   		axeTex->setWrapModes(GL_CLAMP_TO_EDGE, GL_CLAMP_TO_EDGE);
 
         texture = make_shared<Texture>();
 		texture->setFilename(resourceDirectory + "/mask.png");
 		texture->init();
-		texture->setUnit(23);
+		texture->setUnit(14);
 		texture->setWrapModes(GL_CLAMP_TO_EDGE, GL_CLAMP_TO_EDGE);
     }
 
@@ -880,6 +795,20 @@ public:
 			cubeTex->init();
 		}
 
+        rc = tinyobj::LoadObj(TOshapes, carMat, errStr, (resourceDirectory + "/car/car.obj").c_str(), (resourceDirectory + "/car/").c_str());
+        if (!rc) {
+			cerr << errStr << endl;
+		} else {
+            for (int i = 0; i < TOshapes.size(); i++) {
+                shared_ptr<Shape> tmp = make_shared<Shape>();
+                tmp->createShape(TOshapes[i]);
+                tmp->measure();
+                tmp->init();
+                
+                carMesh.push_back(tmp);
+            }
+		}
+
         float numSlots = 961;
         modelMatrices = new glm::mat4[numSlots];
         float rowSize = 31.0f;
@@ -900,7 +829,6 @@ public:
 		}
 
         rc = tinyobj::LoadObj(TOshapes, treeMat, errStr, (resourceDirectory + "/Spruce_obj/Spruce.obj").c_str(), (resourceDirectory + "/Spruce_obj/").c_str());
-        // rc = tinyobj::LoadObj(TOshapes, objMaterials, errStr, (resourceDirectory + "/fir/fir.obj").c_str());
   		if (!rc) {
     		cerr << errStr << endl;
   		} else {
@@ -1191,34 +1119,6 @@ public:
         return vec3(x, -1.2, z);
     }
 
-    void drawLamps(shared_ptr<MatrixStack> Model, shared_ptr<Program> prog) {
-        Model->pushMatrix();
-
-            float zVals[4] = {15, 9, 3, -3};
-            lamp->bind(prog->getUniform("Texture0"));
-            glUniform1f(prog->getUniform("MatShine"), 120);
-
-            for (int l=0; l < 4; l++) {
-                Model->pushMatrix();
-                    Model->translate(vec3(4.5, -1.25, zVals[l]));
-                    Model->scale(vec3(1, 1, 1));
-                    setModel(prog, Model);
-                    lampMesh->draw(prog);
-                Model->popMatrix();
-            }
-
-            for (int r=0; r < 4; r++) {
-                Model->pushMatrix();
-                    Model->translate(vec3(-4.5, -1.25, zVals[r]));
-                    Model->rotate(3.14159, vec3(0, 1, 0));
-                    Model->scale(vec3(1, 1, 1));
-                    setModel(prog, Model);
-                    lampMesh->draw(prog);
-                Model->popMatrix();
-            }
-        Model->popMatrix();
-    }
-
     vec3 findCenter(int i) {
         float x = (dummyMesh[i]->max.x + dummyMesh[i]->min.x)/2;
         float y = (dummyMesh[i]->max.y + dummyMesh[i]->min.y)/2;
@@ -1260,14 +1160,12 @@ public:
     }
 
     void drawLeftArm(shared_ptr<MatrixStack> Model, shared_ptr<Program> prog, float frametime) {
-        // LEFT ARM
         //  KEYFRAMES X-AXIS: -PI/2.4 (arm to side),
         //  KEYFRAMES Z-AXIS: none, PI/8.0, none, -PI/8.0
         Model->pushMatrix();
             Model->translate(vec3(1.0f*dummyMesh[21]->min.x, 1.0f*dummyMesh[21]->min.y, 1.0f*dummyMesh[21]->max.z));
             Model->rotate(-PI/2.4, vec3(1, 0, 0));
             Model->rotate(limbRot[0], vec3(0, 0, 1));
-            // handleInterpolation(lArmKF[frame[0]], frametime, Model, vec3(0, 0, 1), "Left arm", 0);
             Model->translate(vec3(-1.0f*dummyMesh[21]->min.x, -1.0f*dummyMesh[21]->min.y, -1.0f*dummyMesh[21]->max.z));
             setModel(prog, Model);
             for (int i=21; i <=26; i++) {
@@ -1281,14 +1179,12 @@ public:
     }
 
     void drawRightArm(shared_ptr<MatrixStack> Model, shared_ptr<Program> prog, float frametime) {
-        // RIGHT ARM
         //  KEYFRAMES X-AXIS: PI/2.4 (arm to side)
         //  KEYFRAMES Z-AXIS: none, PI/8.0, none, -PI/8.0
         Model->pushMatrix();
             Model->translate(vec3(1.0f*dummyMesh[15]->max.x, 1.0f*dummyMesh[15]->max.y, 1.0f*dummyMesh[15]->max.z));
             Model->rotate(PI/2.4, vec3(1, 0, 0));
             Model->rotate(limbRot[1], vec3(0, 0, 1));
-            // handleInterpolation(rArmKF[frame[1]], frametime, Model, vec3(0, 0, 1), "Right arm", 1);
             Model->translate(vec3(-1.0f*dummyMesh[15]->max.x, -1.0f*dummyMesh[15]->max.y, -1.0f*dummyMesh[15]->max.z));
             setModel(prog, Model);
             for (int i=15; i <=20; i++) {
@@ -1302,12 +1198,10 @@ public:
     }
 
     void drawLeftLeg(shared_ptr<MatrixStack> Model, shared_ptr<Program> prog, float frametime) {
-        // LEFT LEG
         //  KEYFRAMES: PI/6.0 (leg backward), none (but knee bent), -PI/10.0, -PI/6.0, none,
         Model->pushMatrix();
             Model->translate(vec3(1.0f*dummyMesh[11]->min.x, 1.0f*dummyMesh[11]->min.y, 1.0f*dummyMesh[11]->max.z));
             Model->rotate(limbRot[2], vec3(0, 1, 0));
-            // handleInterpolation(lLegKF[frame[2]], frametime, Model, vec3(0, 1, 0), "Left leg", 2);
             Model->translate(vec3(-1.0f*dummyMesh[11]->min.x, -1.0f*dummyMesh[11]->min.y, -1.0f*dummyMesh[11]->max.z));
             setModel(prog, Model);
             SetMaterial(prog, 2);
@@ -1317,7 +1211,6 @@ public:
             // KEYFRAMES: none, PI/3.0, PI/4.0, none, none, 
             Model->translate(vec3(1.0f*dummyMesh[9]->max.x, 1.0f*dummyMesh[9]->min.y, 1.0f*dummyMesh[9]->max.z));
             Model->rotate(limbRot[3], vec3(0, 1, 0));
-            // handleInterpolation(lKneeKF[frame[3]], frametime, Model, vec3(0, 1, 0), "Left knee", 3);
             Model->translate(vec3(-1.0f*dummyMesh[9]->max.x, -1.0f*dummyMesh[9]->min.y, -1.0f*dummyMesh[9]->max.z));
             setModel(prog, Model);
             SetMaterial(prog, 2);
@@ -1332,12 +1225,10 @@ public:
     }
 
     void drawRightLeg(shared_ptr<MatrixStack> Model, shared_ptr<Program> prog, float frametime) {
-        // RIGHT LEG
         //  KEYFRAMES: -PI/6.0 (leg forward), none, none, PI/6.0, none (but knee bent)
         Model->pushMatrix();
             Model->translate(vec3(1.0f*dummyMesh[5]->max.x, 1.0f*dummyMesh[5]->max.y, 1.0f*dummyMesh[5]->max.z));
             Model->rotate(limbRot[4], vec3(0, 1, 0));
-            // handleInterpolation(rLegKF[frame[4]], frametime, Model, vec3(0, 1, 0), "Right leg", 4);
             Model->translate(vec3(-1.0f*dummyMesh[5]->max.x, -1.0f*dummyMesh[5]->max.y, -1.0f*dummyMesh[5]->max.z));
             setModel(prog, Model);
             SetMaterial(prog, 2);
@@ -1346,7 +1237,6 @@ public:
 
             // KEYFRAMES: none, none, none, none, PI/3.0
             Model->translate(vec3(1.0f*dummyMesh[9]->max.x, 1.0f*dummyMesh[9]->min.y, 1.0f*dummyMesh[9]->max.z));
-            // handleInterpolation(rKneeKF[frame[5]], frametime, Model, vec3(0, 1, 0), "Right knee", 5);
             Model->rotate(limbRot[5], vec3(0, 1, 0));
             Model->translate(vec3(-1.0f*dummyMesh[9]->max.x, -1.0f*dummyMesh[9]->min.y, -1.0f*dummyMesh[9]->max.z));
             setModel(prog, Model);
@@ -1389,6 +1279,27 @@ public:
         Model->popMatrix();
     }
 
+    void drawCar(shared_ptr<MatrixStack> Model, shared_ptr<Program> prog) {
+        driveTheta = 1.5*sin(glfwGetTime());
+
+        Model->pushMatrix();
+            vec3 pos = mapSpaces(0, 17);
+            Model->translate(vec3(pos.x, -0.5, pos.z - 4));
+            //Model->translate(vec3(2.7, -0.85, 2));
+            Model->translate(vec3(driveTheta, 0, 0));
+            Model->rotate(PI/2.0, vec3(0, 1, 0));
+            Model->scale(vec3(0.55, 0.55, 0.55));
+
+            setModel(prog, Model);
+            float diffuse[3] = {0.840000, 0.332781, 0.311726};
+            for (int i=0; i < carMesh.size(); i++) {
+                int mat = carMesh[i]->getMat()[0];
+                SetGenericMat(prog, carMat[mat].ambient, carMat[mat].diffuse, carMat[mat].specular, carMat[mat].shininess, "car");
+                carMesh[i]->draw(prog);
+            }
+        Model->popMatrix();
+    }
+
    	void updateUsingCameraPath(float frametime)  {
 
    	  if (goCamera) {
@@ -1416,7 +1327,6 @@ public:
             while (getline(myfile, slot)) {
                 for (int j=0; j < slot.length(); j++) {
                     if (slot[j] == 'x') {
-                        numWalls++;
                         occupancy[i][j] = 1;
                     } else {
                         occupancy[i][j] = 0;
@@ -1511,7 +1421,6 @@ public:
             // Model->popMatrix();
 
             //drawHouse(Model, texProg);
-            // drawLamps(Model, texProg);
 
             // hedge->bind(texProg->getUniform("Texture0"));
             // for (int i=0; i < 31; i++) {
@@ -1561,11 +1470,6 @@ public:
                 if (treeMat[mat].diffuse_texname != "") {
                     textureMap.at(treeMat[mat].diffuse_texname)->bind(progInst->getUniform("Texture0"));
                 }
-                // if (i==0) {
-                //     firTrunk->bind(progInst->getUniform("Texture0"));
-                // } else {
-                //     firLeaf->bind(progInst->getUniform("Texture0"));
-                // }
                 cubeInst[i]->draw(progInst);
             }
 		progInst->unbind();
@@ -1596,6 +1500,7 @@ public:
             glUniform3f(prog->getUniform("D"), dummyLoc.x + gaze.x, dummyLoc.y + gaze.y, dummyLoc.z + gaze.z);
             SetView(prog);
             drawDummy(Model, prog, frametime);
+            drawCar(Model, prog);
         prog->unbind();
 
         glEnable(GL_BLEND);
@@ -1621,10 +1526,14 @@ public:
                 } else {
                     writer->drawText(1, "Axes: "+std::to_string(hasAxe), 50.0f, 10.0f, 0.5f, glm::vec3(1.0f, 1.0f, 1.0f));
                 }
-                if (lostGame) {
-                    writer->drawText(1, "You Lost :(", width/2, height/2+85.0f, 1.0f, glm::vec3(1.0f, 1.0f, 1.0f));
-                    writer->drawText(1, "You didn't finish the maze before the time was up.", width/2, height/2+60.0f, 0.35f, glm::vec3(1.0f, 1.0f, 1.0f));
-                    writer->drawText(1, "Press R to restart", width/2, height/2+10.0f, 0.45f, glm::vec3(1.0f, 1.0f, 1.0f));
+                if (timedGame) {
+                    if (lostGame) {
+                        writer->drawText(1, "You Lost :(", width/2, height/2+85.0f, 1.0f, glm::vec3(1.0f, 1.0f, 1.0f));
+                        writer->drawText(1, "You didn't finish the maze before the time was up.", width/2, height/2+60.0f, 0.35f, glm::vec3(1.0f, 1.0f, 1.0f));
+                        writer->drawText(1, "Press R to restart", width/2, height/2+10.0f, 0.45f, glm::vec3(1.0f, 1.0f, 1.0f));
+                    } else {
+                        writer->drawText(1, formatTime(), 600.0f, 10.0f, 0.5f, glm::vec3(1.0f, 1.0f, 1.0f));
+                    }
                 }
             }
         glyphProg->unbind();
