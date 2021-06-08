@@ -1520,9 +1520,8 @@ public:
                         writer->drawText(1, "Time Taken: "+formatTime(), width/2, height/2+60.0f, 0.35f, glm::vec3(1.0f, 1.0f, 1.0f));
                     }
                     headWriter->drawText(1, "PRESS R TO RESTART", width/2, height/2+10.0f, 0.45f, glm::vec3(1.0f, 1.0f, 1.0f));
-                } else {
-                    headWriter->drawText(1, "AXES: "+std::to_string(hasAxe), 50.0f, 10.0f, 0.5f, glm::vec3(1.0f, 1.0f, 1.0f));
                 }
+                headWriter->drawText(1, "AXES: "+std::to_string(hasAxe), 50.0f, 10.0f, 0.5f, glm::vec3(1.0f, 1.0f, 1.0f));
                 if (timedGame) {
                     if (lostGame) {
                         headWriter->drawText(1, "YOU LOST :(", width/2, height/2+85.0f, 1.0f, glm::vec3(1.0f, 1.0f, 1.0f));
@@ -1530,9 +1529,9 @@ public:
                         headWriter->drawText(1, "PRESS R TO RESTART", width/2, height/2+10.0f, 0.45f, glm::vec3(1.0f, 1.0f, 1.0f));
                     } else {
                         if (timer <= 10)
-                            headWriter->drawText(1, formatTime(), 600.0f, 10.0f, 0.5f, glm::vec3(0.9f, 0.2f, 0.2f));
+                            headWriter->drawText(1, formatTime(), 35.0f, 40.0f, 0.5f, glm::vec3(0.9f, 0.2f, 0.2f));
                         else
-                            headWriter->drawText(1, formatTime(), 600.0f, 10.0f, 0.5f, glm::vec3(1.0f, 1.0f, 1.0f));
+                            headWriter->drawText(1, formatTime(), 35.0f, 40.0f, 0.5f, glm::vec3(1.0f, 1.0f, 1.0f));
                     }
                 }
             }
