@@ -114,7 +114,10 @@ public:
     FT_Library ft;
     TextGen* writer;
     bool gameOver = false;
+    bool lostGame = false;
     bool startScreen = true;
+    bool timedGame = false;
+    float timer = 20; // 7.5 minutes
     float gameStart = 0;
     float gameEnd = 0;
 
@@ -185,7 +188,7 @@ public:
     // vec3 g_eye = vec3(0, 0, 0);
     // vec3 g_lookAt = vec3(0, 60, 10);
     float speed = 0.3;
-    float camY = 1.75;
+    float camY = 1.8;
     float camZ = 1.4;
     vec3 g_eye = vec3(-20, 12, -20);
     //vec3 g_eye = vec3(dummyLoc.x, dummyLoc.y+camY, dummyLoc.z+camZ); // 16, 0, 33
@@ -237,7 +240,7 @@ public:
 		}
         if (key == GLFW_KEY_R && action == GLFW_PRESS) { // Restart
             dummyLoc = vec3(16, -1.25, 27.25);
-            g_eye = vec3(dummyLoc.x, dummyLoc.y+camY, dummyLoc.z+camZ);
+            g_eye = vec3(-20, 12, -20);
             g_lookAt = vec3(dummyLoc.x, dummyLoc.y+camY, dummyLoc.z);
             gaze = g_eye - g_lookAt;
             for (int i=0; i < 3; i++) {
@@ -251,7 +254,6 @@ public:
             gameOver = false;
             startScreen = true;
             overallFrame = 0;
-            gameStart = glfwGetTime();
             for (int k=0; k < choppedTrees.size(); k++) { // Reset any chopped trees
                 vec2 spot = choppedTrees[k];
                 vec3 tmp = mapSpaces(spot.x, spot.y);
@@ -264,7 +266,27 @@ public:
                 }
             }
             choppedTrees.clear();
+            lostGame = false;
+            timer = 20;
+            g_phi = 0;
+            g_theta = -PI/2;
+            splinepath[0] = Spline(glm::vec3(-20,12,-20), glm::vec3(-10,10,-10), glm::vec3(0, 8, 0), glm::vec3(10,6,10), 3);
+            splinepath[1] = Spline(glm::vec3(10,6,10), glm::vec3(20,4,20), glm::vec3(25, 2, 30), glm::vec3(16,-1.25+camY,27.25+camZ), 3);
         }
+        if (key == GLFW_KEY_1 && action == GLFW_PRESS) { // Explore game mode
+            timedGame = false;
+            startScreen = false;
+			goCamera = !goCamera;
+            if (!goCamera)
+                computeLookAt();
+		}
+        if (key == GLFW_KEY_2 && action == GLFW_PRESS) { // Timed game mode
+            timedGame = true;
+            startScreen = false;
+			goCamera = !goCamera;
+            if (!goCamera)
+                computeLookAt();
+		}
         if (key == GLFW_KEY_T && action == GLFW_PRESS) { // Chopping down trees
             vec2 tmp = findMySpace(dummyLoc);
             if (hasAxe > 0 && firstAct) {
@@ -336,7 +358,7 @@ public:
 			view = g_lookAt - g_eye;
             vec3 tmp = dummyLoc + (speed*view);
             //if (!detectCollision(dummyLoc + (speed*view)) && !detectHeight(dummyLoc + (speed*view))) { // originally g_eye not dummyLoc
-            if (!detectCollision(tmp)) {
+            if (!detectCollision(tmp) && !lostGame) {
                 isWalking = true;
                 // dummyLoc = dummyLoc + (speed*view);
                 dummyLoc = vec3(tmp.x, -1.25, tmp.z);
@@ -349,7 +371,7 @@ public:
         if (key == GLFW_KEY_A && action == GLFW_PRESS){
             view = g_lookAt - g_eye;
             strafe = cross(view, vec3(0, 1, 0));
-            if (!detectCollision(dummyLoc - (speed*strafe))) {
+            if (!detectCollision(dummyLoc - (speed*strafe)) && !lostGame) {
                 isWalking = true;
                 dummyLoc = dummyLoc - (speed*strafe);
                 g_eye = g_eye - (speed*strafe);
@@ -361,7 +383,7 @@ public:
 			view = g_lookAt - g_eye;
             vec3 tmp = dummyLoc - (speed*view);
             //if (!detectCollision(dummyLoc - (speed*view)) && !detectHeight(dummyLoc - (speed*view))) {
-            if (!detectCollision(tmp)) {
+            if (!detectCollision(tmp) && !lostGame) {
                 isWalking = true;
                 // dummyLoc = dummyLoc - (speed*view);
                 dummyLoc = vec3(tmp.x, -1.25, tmp.z);
@@ -374,7 +396,7 @@ public:
         if (key == GLFW_KEY_D && action == GLFW_PRESS){
             view = g_lookAt - g_eye;
             strafe = cross(view, vec3(0, 1, 0));
-            if (!detectCollision(dummyLoc + (speed*strafe))) {
+            if (!detectCollision(dummyLoc + (speed*strafe)) && !lostGame) {
                 isWalking = true;
                 dummyLoc = dummyLoc + (speed*strafe);
                 g_eye = g_eye + (speed*strafe);
@@ -639,7 +661,6 @@ public:
 		glEnable(GL_DEPTH_TEST);
 
 		g_theta = -PI/2.0;
-        gameStart = glfwGetTime();
 
 		// Initialize the GLSL program that we will use for local shading
 		prog = make_shared<Program>();
@@ -740,7 +761,7 @@ public:
 
   		// init splines up and down
         splinepath[0] = Spline(glm::vec3(-20,12,-20), glm::vec3(-10,10,-10), glm::vec3(0, 8, 0), glm::vec3(10,6,10), 3);
-        splinepath[1] = Spline(glm::vec3(10,6,10), glm::vec3(20,4,20), glm::vec3(25, 2, 30), glm::vec3(16,0,33), 3);
+        splinepath[1] = Spline(glm::vec3(10,6,10), glm::vec3(20,4,20), glm::vec3(25, 2, 30), glm::vec3(16,-1.25+camY,27.25+camZ), 3);
 
         //engine->play2D("forest.mp3", true); 
 	}
@@ -769,7 +790,6 @@ public:
     }
 
     void initKeyframes() {
-        //vector<float> arms{0, PI/8.0, 0, -PI/8.0};
         vector<float> arms{-PI/8.0, 0, PI/8.0, 0};
         for (int i=0; i < arms.size(); i++) {
             Keyframe tmp = Keyframe(arms[i], arms[i+1], frameDur, "arm");
@@ -804,55 +824,6 @@ public:
                 tmp = Keyframe(rKnee[i], rKnee[0], frameDur, "rKnee"+std::to_string(i));
             rKneeKF.push_back(tmp);
         }
-        /*
-        vector<float> arms{0, PI/8.0, 0, -PI/8.0};
-        for (int i=0; i < arms.size(); i++) {
-            shared_ptr<Keyframe> tmp = make_shared<Keyframe>();
-            if (i == arms.size()-1)
-               tmp->init(arms[i], arms[0], frameDur);
-            else
-                tmp->init(arms[i], arms[i+1], frameDur);
-            lArmKF.push_back(tmp);
-            rArmKF.push_back(tmp);
-        }
-
-        vector<float> legs{PI/6.0, 0, -PI/6.0, 0};
-        for (int i=0; i < legs.size(); i++) {
-            shared_ptr<Keyframe> tmp = make_shared<Keyframe>();
-            if (i == legs.size()-1)
-                tmp->init(legs[i], legs[0], frameDur);
-            else
-                tmp->init(legs[i], legs[i+1], frameDur);
-            lLegKF.push_back(tmp);
-
-            shared_ptr<Keyframe> tmp2 = make_shared<Keyframe>();
-            if (i == legs.size()-1)
-                tmp2->init(-1*legs[i], -1*legs[0], frameDur);
-            else
-                tmp2->init(-1*legs[i], -1*legs[i+1], frameDur);
-            rLegKF.push_back(tmp2);
-        }
-
-        vector<float> lKnee{0, PI/3.0, 0, 0};
-        for (int i=0; i < lKnee.size(); i++) {
-            shared_ptr<Keyframe> tmp = make_shared<Keyframe>();
-            if (i == lKnee.size()-1)
-                tmp->init(lKnee[i], lKnee[0], frameDur);
-            else
-                tmp->init(lKnee[i], lKnee[i+1], frameDur);
-            lKneeKF.push_back(tmp);
-        }
-
-        vector<float> rKnee{0, 0, 0, PI/3.0};
-        for (int i=0; i < rKnee.size(); i++) {
-            shared_ptr<Keyframe> tmp = make_shared<Keyframe>();
-            if (i == rKnee.size()-1)
-                tmp->init(rKnee[i], rKnee[0], frameDur);
-            else
-                tmp->init(rKnee[i], rKnee[i+1], frameDur);
-            rKneeKF.push_back(tmp);
-        }
-        */
     }
 
 	void initGeom(const std::string& resourceDirectory)
@@ -1418,17 +1389,6 @@ public:
         Model->popMatrix();
     }
 
-    // void drawFireflies(shared_ptr<MatrixStack> Model, shared_ptr<Program> prog) {
-    //     Model->pushMatrix();        
-    //         //for (int i=12; i <= 14; i++) {
-    //             Model->translate(vec3(dummyLoc.x, dummyLoc.y, dummyLoc.z+1));
-    //             Model->scale(vec3(1, 1, 1));
-    //             setModel(prog, Model);
-    //             sphere->draw(prog);
-    //         //}
-    //     Model->popMatrix();
-    // }
-
    	void updateUsingCameraPath(float frametime)  {
 
    	  if (goCamera) {
@@ -1440,8 +1400,8 @@ public:
             splinepath[1].update(frametime);
             g_eye = splinepath[1].getPosition();
             if (splinepath[1].isDone()) {
-                g_eye = vec3(dummyLoc.x, dummyLoc.y+camY, dummyLoc.z+camZ);
                 goCamera = false;
+                gameStart = glfwGetTime();
             }
         }
       }
@@ -1471,13 +1431,24 @@ public:
     }
 
     string formatTime() {
-        float totalTime = gameEnd - gameStart;
+        float totalTime = 0;
+        if (timedGame)
+            totalTime = timer;
+        else
+            totalTime = gameEnd - gameStart;
         int min = totalTime/60;
         int sec = (int)totalTime%60;
         if (sec < 10)
             return std::to_string(min)+":0"+std::to_string(sec);
         else
             return std::to_string(min)+":"+std::to_string(sec);
+    }
+
+    void updateTimer(float frametime) {
+        timer -= frametime;
+        if (timer <= 0) {
+            lostGame = true;
+        }
     }
 
 	void render(float frametime) {
@@ -1504,12 +1475,13 @@ public:
 		Projection->pushMatrix();
 		Projection->perspective(45.0f, aspect, 0.01f, 100.0f);
 
+        if (timedGame && !lostGame && !gameOver) {
+            updateTimer(frametime);
+        }
+
 		texProg->bind();
             glUniformMatrix4fv(texProg->getUniform("P"), 1, GL_FALSE, value_ptr(Projection->topMatrix()));
             SetView(texProg);
-            // glUniform3f(texProg->getUniform("lightPos"), 3.0+lightTrans, 8.0, 7);
-            // glUniform3f(texProg->getUniform("lightPos"), g_eye.x, g_eye.y, g_eye.z);
-            //glUniform3f(texProg->getUniform("moonLight"), 10, 10, 10);
             glUniform3f(texProg->getUniform("moonLight"), 0, 8, 0);
             glUniform3f(texProg->getUniform("camLight"), g_eye.x, g_eye.y, g_eye.z);
             glUniform3f(texProg->getUniform("lightPos"), dummyLoc.x, dummyLoc.y+camY, dummyLoc.z);
@@ -1579,8 +1551,6 @@ public:
         progInst->bind();
             glUniformMatrix4fv(progInst->getUniform("P"), 1, GL_FALSE, value_ptr(Projection->topMatrix()));
             SetView(progInst);
-            // glUniform3f(progInst->getUniform("lightPos"), g_eye.x, g_eye.y, g_eye.z);
-            //glUniform3f(progInst->getUniform("moonLight"), 10, 10, 10);
             glUniform3f(progInst->getUniform("moonLight"), 0, 8, 0);
             glUniform3f(progInst->getUniform("camLight"), g_eye.x, g_eye.y, g_eye.z);
             glUniform3f(progInst->getUniform("lightPos"), dummyLoc.x, dummyLoc.y+camY, dummyLoc.z);
@@ -1608,7 +1578,7 @@ public:
             Model->pushMatrix();
             Model->translate(vec3(0, -3, 0));
             Model->rotate(3.1416, vec3(0, 1, 0));
-            Model->scale(vec3(100, 100, 100));
+            Model->scale(vec3(80, 80, 80));
             glUniformMatrix4fv(cubeProg->getUniform("M"), 1, GL_FALSE,value_ptr(Model->topMatrix()));
             Model->popMatrix();
             glBindTexture(GL_TEXTURE_CUBE_MAP, cubeMapTexture);
@@ -1620,8 +1590,6 @@ public:
 
         prog->bind();
             glUniformMatrix4fv(prog->getUniform("P"), 1, GL_FALSE, value_ptr(Projection->topMatrix()));
-            // glUniform3f(prog->getUniform("lightPos"), g_eye.x, g_eye.y, g_eye.z);
-            //glUniform3f(prog->getUniform("moonLight"), 10, 10, 10);
             glUniform3f(prog->getUniform("moonLight"), 0, 8, 0);
             glUniform3f(prog->getUniform("camLight"), g_eye.x, g_eye.y, g_eye.z);
             glUniform3f(prog->getUniform("lightPos"), dummyLoc.x, dummyLoc.y+camY, dummyLoc.z);
@@ -1638,12 +1606,24 @@ public:
             glUniformMatrix4fv(glyphProg->getUniform("P"), 1, GL_FALSE, value_ptr(projection));
             if (startScreen) {
                 writer->drawText(1, "Escape the Forest", width/2, height/2+85.0f, 1.0f, glm::vec3(1.0f, 1.0f, 1.0f));
-                writer->drawText(1, "Press G to Start", width/2, height/2+50.0f, 0.45f, glm::vec3(1.0f, 1.0f, 1.0f));
+                writer->drawText(1, "Select Mode (Press 1 or 2):", width/2, height/2-20.0f, 0.45f, glm::vec3(1.0f, 1.0f, 1.0f));
+                writer->drawText(1, "Explore Mode (1): See if you can escape the maze!", width/2, height/2-45.0f, 0.35f, glm::vec3(1.0f, 1.0f, 1.0f));
+                writer->drawText(1, "Timed Mode (2): See if you can escape the maze before time runs out!", width/2, height/2-65.0f, 0.35f, glm::vec3(1.0f, 1.0f, 1.0f));
             } else {
-                writer->drawText(1, "Axes: "+std::to_string(hasAxe), 50.0f, 10.0f, 0.5f, glm::vec3(1.0f, 1.0f, 1.0f));
                 if (gameOver) {
                     writer->drawText(1, "You Won!", width/2, height/2+85.0f, 1.0f, glm::vec3(1.0f, 1.0f, 1.0f));
-                    writer->drawText(1, "Time Taken: "+formatTime(), width/2, height/2+60.0f, 0.35f, glm::vec3(1.0f, 1.0f, 1.0f));
+                    if (timedGame){
+                        writer->drawText(1, "Time Left: "+formatTime(), width/2, height/2+60.0f, 0.35f, glm::vec3(1.0f, 1.0f, 1.0f));
+                    } else {
+                        writer->drawText(1, "Time Taken: "+formatTime(), width/2, height/2+60.0f, 0.35f, glm::vec3(1.0f, 1.0f, 1.0f));
+                    }
+                    writer->drawText(1, "Press R to restart", width/2, height/2+10.0f, 0.45f, glm::vec3(1.0f, 1.0f, 1.0f));
+                } else {
+                    writer->drawText(1, "Axes: "+std::to_string(hasAxe), 50.0f, 10.0f, 0.5f, glm::vec3(1.0f, 1.0f, 1.0f));
+                }
+                if (lostGame) {
+                    writer->drawText(1, "You Lost :(", width/2, height/2+85.0f, 1.0f, glm::vec3(1.0f, 1.0f, 1.0f));
+                    writer->drawText(1, "You didn't finish the maze before the time was up.", width/2, height/2+60.0f, 0.35f, glm::vec3(1.0f, 1.0f, 1.0f));
                     writer->drawText(1, "Press R to restart", width/2, height/2+10.0f, 0.45f, glm::vec3(1.0f, 1.0f, 1.0f));
                 }
             }
