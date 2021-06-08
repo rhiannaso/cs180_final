@@ -22,6 +22,9 @@
 #include "stb_image.h"
 #include "Bezier.h"
 #include "Spline.h"
+#include "particleSys.h"
+#include "irrKlang.h"
+#include "TextGen.h"
 
 #define TINYOBJLOADER_IMPLEMENTATION
 #include <tiny_obj_loader/tiny_obj_loader.h>
@@ -31,8 +34,11 @@
 #include <glm/gtc/type_ptr.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 
+#pragma comment(lib, "irrKlang.lib") // link with irrKlang.dll
+
 using namespace std;
 using namespace glm;
+//using namespace irrklang;
 
 class Application : public EventCallbacks
 {
@@ -52,6 +58,10 @@ public:
 
     std::shared_ptr<Program> progInst;
 
+    std::shared_ptr<Program> partProg;
+
+    std::shared_ptr<Program> glyphProg;
+
 	//our geometry
 	shared_ptr<Shape> sphere;
 
@@ -67,22 +77,24 @@ public:
     vector<shared_ptr<Shape>> houseMesh;
     vector<shared_ptr<Shape>> carMesh;
     vector<shared_ptr<Shape>> dummyMesh;
-    vector<shared_ptr<Shape>> statueMesh;
     vector<shared_ptr<Shape>> statueMesh2;
     vector<shared_ptr<Shape>> axeMesh;
-    vector<vec3> dummyMin;
-    vector<vec3> dummyMax;
+    vec3 dummyMin;
+    vec3 dummyMax;
 
     vector<tinyobj::material_t> houseMat;
     vector<tinyobj::material_t> carMat;
     vector<tinyobj::material_t> treeMat;
     map<string, shared_ptr<Texture>> textureMap;
 
+    //animation data
+	float lightTrans = 0;
     float driveTheta = 0;
-    int frame = 0;
-    bool newFrame = true;
-    float frameDur = 2;
-    float startTime;
+    float frameDur = 0.25;
+    float startTime = 0;
+    bool isNewFrame = true;
+    int overallFrame = 0;
+    vector<float> limbRot{0, 0, 0, 0, 0, 0};
     // vector<float> lArmKF{0, PI/10.0, PI/8.0, 0, -PI/10.0, -PI/8.0};
     // vector<float> rArmKF{0, PI/10.0, PI/8.0, 0, -PI/10.0, -PI/8.0};
     // vector<float> lLegKF{PI/8.0, PI/10.0, 0, -PI/8.0, -PI/10.0, 0};
@@ -95,6 +107,20 @@ public:
     vector<Keyframe> lKneeKF;
     vector<Keyframe> rLegKF;
     vector<Keyframe> rKneeKF;
+    bool isWalking = false;
+
+    // freetext
+    FT_Library ft;
+    TextGen* writer;
+    bool gameOver = false;
+    bool lostGame = false;
+    bool startScreen = true;
+    bool timedGame = false;
+    float timer = 300; // 5 minutes
+    float gameStart = 0;
+    float gameEnd = 0;
+
+    string rDir; // resource directory
 
     //skybox data
     vector<std::string> faces {
@@ -114,55 +140,44 @@ public:
 	GLuint GroundVertexArrayID;
 
 	//the image to use as a texture (ground)
-	shared_ptr<Texture> texture0;
-	shared_ptr<Texture> brownWood;
     shared_ptr<Texture> brick;
     shared_ptr<Texture> blackText;
     shared_ptr<Texture> lightWood;
-    shared_ptr<Texture> leaf;
-    shared_ptr<Texture> road;
     shared_ptr<Texture> bumpBrick;
     shared_ptr<Texture> whiteText;
     shared_ptr<Texture> tiles;
     shared_ptr<Texture> stone;
-    shared_ptr<Texture> lamp;
     shared_ptr<Texture> whiteWood;
     shared_ptr<Texture> glass;
-    shared_ptr<Texture> bark;
-    shared_ptr<Texture> bigLeaf;
-    shared_ptr<Texture> hedge;
     shared_ptr<Texture> dirt;
-    shared_ptr<Texture> statueTex;
     shared_ptr<Texture> statueTex2;
     shared_ptr<Texture> spruceLeaf;
     shared_ptr<Texture> spruceTrunk;
-    shared_ptr<Texture> firLeaf;
-    shared_ptr<Texture> firTrunk;
     shared_ptr<Texture> axeTex;
+    shared_ptr<Texture> texture;
 
-	//animation data
-	float lightTrans = 0;
+    //the partricle system
+	particleSys *thePartSystem;
+    vec3 leavesPos = vec3(0, 0, 0); // tmp val
 
     int occupancy[31][31] = {0};
     vector<float> positions;
     glm::mat4 *modelMatrices;
-    int numWalls = 0;
+    vector<vec2> choppedTrees;
 
 	//camera
 	double g_phi, g_theta;
-    vec3 dummyLoc = vec3(16, -1.25, 30);
-    // vec3 dummyLoc = vec3(mapSpaces(27, 17).x, -1.25, mapSpaces(27, 17).z);
+    vec3 dummyLoc = vec3(16, -1.25, 27.25);
     float dummyRot = PI/2.0;
 	vec3 view = vec3(0, 0, 1);
 	vec3 strafe = vec3(1, 0, 0);
-    // vec3 g_eye = vec3(mapSpaces(11, 15).x, 0, mapSpaces(11, 15).z);
-    // vec3 g_eye = vec3(0, 0, 0);
-    // vec3 g_lookAt = vec3(0, 60, 10);
     float speed = 0.3;
-    float camY = 1.75;
-    float camZ = 2;
-    vec3 g_eye = vec3(dummyLoc.x, dummyLoc.y+camY, dummyLoc.z+camZ); // 16, 0, 33
+    float camY = 1.8;
+    float camZ = 1.4;
+    vec3 g_eye = vec3(-20, 12, -20);
+    //vec3 g_eye = vec3(dummyLoc.x, dummyLoc.y+camY, dummyLoc.z+camZ); // 16, 0, 33
     vec3 g_lookAt = vec3(dummyLoc.x, dummyLoc.y+camY, dummyLoc.z); // 16, 0, 30
+    vec3 gaze = g_eye - g_lookAt;
 
     // Chopping actions
     int hasAxe = 0;
@@ -171,6 +186,7 @@ public:
     float axe_x[3] = {mapSpaces(11, 15).x, mapSpaces(13, 5).x, mapSpaces(27, 17).x};
     float axe_z[3] = {mapSpaces(11, 15).z, mapSpaces(13, 5).z, mapSpaces(27, 17).z};
     bool axe_taken[3] = {false, false, false};
+    bool isChopping = false;
 
 	Spline splinepath[2];
 	bool goCamera = false;
@@ -190,18 +206,82 @@ public:
 		if (key == GLFW_KEY_Z && action == GLFW_PRESS) {
 			glPolygonMode( GL_FRONT_AND_BACK, GL_LINE );
 		}
+        if (key == GLFW_KEY_V && action == GLFW_PRESS) { // Show finish
+            dummyLoc = vec3(mapSpaces(0, 17).x, -1.25, mapSpaces(0, 17).z);
+            g_eye = vec3(dummyLoc.x, dummyLoc.y+camY, dummyLoc.z+camZ);
+            g_lookAt = vec3(dummyLoc.x, dummyLoc.y+camY, dummyLoc.z);
+            gaze = g_eye - g_lookAt;
+            g_theta = -PI/2.0;
+            computeLookAt();
+		}
+        if (key == GLFW_KEY_X && action == GLFW_PRESS) { // Show axe functionality
+			dummyLoc = vec3(mapSpaces(27, 16).x, -1.25, mapSpaces(27, 16).z);
+            g_eye = vec3(dummyLoc.x, dummyLoc.y+camY, dummyLoc.z+camZ);
+            g_lookAt = vec3(dummyLoc.x, dummyLoc.y+camY, dummyLoc.z);
+            gaze = g_eye - g_lookAt;
+            g_theta = 0;
+            computeLookAt();
+		}
+        if (key == GLFW_KEY_R && action == GLFW_PRESS) { // Restart
+            goCamera = false;
+            dummyLoc = vec3(16, -1.25, 27.25);
+            g_eye = vec3(-20, 12, -20);
+            g_lookAt = vec3(dummyLoc.x, dummyLoc.y+camY, dummyLoc.z);
+            gaze = g_eye - g_lookAt;
+            splinepath[0] = Spline(glm::vec3(-20,12,-20), glm::vec3(-10,10,-10), glm::vec3(0, 8, 0), glm::vec3(10,6,10), 3);
+            splinepath[1] = Spline(glm::vec3(10,6,10), glm::vec3(20,4,20), glm::vec3(25, 2, 30), glm::vec3(16,-1.25+camY,27.25+camZ), 3);
+            for (int i=0; i < 3; i++) {
+                axe_taken[i] = false;
+                axe_scale[i] = 0.001;
+            }
+            isChopping = false;
+            readMaze(rDir);
+            firstAct = true;
+            hasAxe = 0;
+            gameOver = false;
+            startScreen = true;
+            overallFrame = 0;
+            for (int k=0; k < choppedTrees.size(); k++) { // Reset any chopped trees
+                vec2 spot = choppedTrees[k];
+                vec3 tmp = mapSpaces(spot.x, spot.y);
+                mat4 t1 = glm::translate(glm::mat4(1.0f), glm::vec3(tmp.x, tmp.y, tmp.z));
+                mat4 r = glm::rotate(glm::mat4(1.0f), (float)(-PI/2), vec3(1, 0, 0));
+                mat4 s = glm::scale(glm::mat4(1.0f), glm::vec3(0.45));
+                modelMatrices[(int)spot.x*31+(int)spot.y] = t1*r*s;
+                for (int j=0; j < cubeInst.size(); j++) {
+                    cubeInst[j]->update(modelMatrices);
+                }
+            }
+            choppedTrees.clear();
+            lostGame = false;
+            timer = 300;
+            g_phi = 0;
+            g_theta = -PI/2;
+            dummyRot = PI/2.0;
+        }
+        if (key == GLFW_KEY_1 && action == GLFW_PRESS) { // Explore game mode
+            timedGame = false;
+            startScreen = false;
+			goCamera = !goCamera;
+            if (!goCamera)
+                computeLookAt();
+		}
+        if (key == GLFW_KEY_2 && action == GLFW_PRESS) { // Timed game mode
+            timedGame = true;
+            startScreen = false;
+			goCamera = !goCamera;
+            if (!goCamera)
+                computeLookAt();
+		}
         if (key == GLFW_KEY_T && action == GLFW_PRESS) { // Chopping down trees
-            //vec2 tmp = findMySpace(g_eye); // TODO: change to dummyLoc
             vec2 tmp = findMySpace(dummyLoc);
             if (hasAxe > 0 && firstAct) {
-                //vec2 chopLoc = findMySpace(g_lookAt); // TODO: figure out what to change to (maybe dummyLoc + 1 in whatever direction it's facing)
                 vec2 chopLoc = findMySpace(g_lookAt);
                 float i = chopLoc.x;
                 float j = chopLoc.y;
                 vec3 view = g_eye-g_lookAt;
-                // TODO: change to g_lookAt - g_eye
-                cout << "VIEW: " << view.x << endl;
-                cout << "VIEW: " << view.z << endl;
+                // cout << "VIEW: " << view.x << endl;
+                // cout << "VIEW: " << view.z << endl;
                 view = vec3(round(view.x), round(view.y), round(view.z));
                 mat4 s = glm::scale(glm::mat4(1.0f), glm::vec3(0.0));
                 if (view.x > 0) {
@@ -215,9 +295,14 @@ public:
                         i += 1;
                     }
                 }
-                cout << i << endl;
-                cout << j << endl;
+                // cout << i << endl;
+                // cout << j << endl;
                 if (occupancy[(int)i][(int)j] != 0) { // Only act if facing a tree
+                    choppedTrees.push_back(vec2(i, j));
+                    leavesPos = vec3(mapSpaces(i, j).x, 0.25, mapSpaces(i, j).z);
+                    thePartSystem = new particleSys(leavesPos);
+		            thePartSystem->gpuSetup();
+                    isChopping = true;
                     occupancy[(int)i][(int)j] = 0; // mark as barrier gone
                     modelMatrices[(int)i*31+(int)j] = s; // redraw with tree gone
                     for (int k=0; k < cubeInst.size(); k++) {
@@ -250,23 +335,29 @@ public:
             firstAct = true;
 		}
 		if (key == GLFW_KEY_G && action == GLFW_RELEASE) {
+            startScreen = false;
 			goCamera = !goCamera;
             if (!goCamera)
                 computeLookAt();
 		}
         if (key == GLFW_KEY_W && action == GLFW_PRESS){
 			view = g_lookAt - g_eye;
-            if (!detectCollision(dummyLoc + (speed*view)) && !detectHeight(dummyLoc + (speed*view))) { // originally g_eye not dummyLoc
-                dummyLoc = dummyLoc + (speed*view);
-                g_eye = g_eye + (speed*view);
+            vec3 tmp = dummyLoc + (speed*view);
+            if (!detectCollision(tmp) && !lostGame) {
+                isWalking = true;
+                // dummyLoc = dummyLoc + (speed*view);
+                dummyLoc = vec3(tmp.x, -1.25, tmp.z);
+                // g_eye = g_eye + (speed*view);
                 g_lookAt = vec3(dummyLoc.x, dummyLoc.y+camY, dummyLoc.z);
+                computeLookAt();
                 // g_lookAt = g_lookAt + (speed*view);
             }
 		}
         if (key == GLFW_KEY_A && action == GLFW_PRESS){
             view = g_lookAt - g_eye;
             strafe = cross(view, vec3(0, 1, 0));
-            if (!detectCollision(dummyLoc - (speed*strafe)) && !detectHeight(dummyLoc - (speed*strafe))) {
+            if (!detectCollision(dummyLoc - (speed*strafe)) && !lostGame) {
+                isWalking = true;
                 dummyLoc = dummyLoc - (speed*strafe);
                 g_eye = g_eye - (speed*strafe);
                 g_lookAt = vec3(dummyLoc.x, dummyLoc.y+camY, dummyLoc.z);
@@ -275,17 +366,22 @@ public:
 		}
         if (key == GLFW_KEY_S && action == GLFW_PRESS){
 			view = g_lookAt - g_eye;
-            if (!detectCollision(dummyLoc - (speed*view)) && !detectHeight(dummyLoc - (speed*view))) {
-                dummyLoc = dummyLoc - (speed*view);
-                g_eye = g_eye - (speed*view);
+            vec3 tmp = dummyLoc - (speed*view);
+            if (!detectCollision(tmp) && !lostGame) {
+                isWalking = true;
+                // dummyLoc = dummyLoc - (speed*view);
+                dummyLoc = vec3(tmp.x, -1.25, tmp.z);
+                // g_eye = g_eye - (speed*view);
                 g_lookAt = vec3(dummyLoc.x, dummyLoc.y+camY, dummyLoc.z);
+                computeLookAt();
                 // g_lookAt = g_lookAt - (speed*view);
             }
 		}
         if (key == GLFW_KEY_D && action == GLFW_PRESS){
             view = g_lookAt - g_eye;
             strafe = cross(view, vec3(0, 1, 0));
-            if (!detectCollision(dummyLoc + (speed*strafe)) && !detectHeight(dummyLoc + (speed*strafe))) {
+            if (!detectCollision(dummyLoc + (speed*strafe)) && !lostGame) {
+                isWalking = true;
                 dummyLoc = dummyLoc + (speed*strafe);
                 g_eye = g_eye + (speed*strafe);
                 g_lookAt = vec3(dummyLoc.x, dummyLoc.y+camY, dummyLoc.z);
@@ -305,25 +401,17 @@ public:
 
     bool detectCollision(vec3 myPos) {
         vec2 occPos = findMySpace(myPos);
+        if (occPos.x < 0) {
+            gameOver = true;
+            gameEnd = glfwGetTime();
+            return true;
+        }
+        if (occPos.x > 30 || occPos.y > 30 || occPos.y < 0) // If beyond the bounds of the maze
+            return true;
         if (occupancy[(int)occPos.x][(int)occPos.y] != 1) // If not a wall
             return false;
         else
             return true;
-    }
-
-    bool detectHeight(vec3 myPos) {
-        // if (thirdP) {
-            if (myPos.y > -0.9 || myPos.y < -1.35)
-                return true;
-            else
-                return false;
-        // } else {
-        //     if (myPos.y > 0.5 || myPos.y < -0.05)
-        //         return true;
-        //     else
-        //         return false;
-        // }
-
     }
 
 	void mouseCallback(GLFWwindow *window, int button, int action, int mods)
@@ -339,12 +427,12 @@ public:
 
 
 	void scrollCallback(GLFWwindow* window, double deltaX, double deltaY) {
-        if (!goCamera) {
+        if (!goCamera && !startScreen) {
             g_theta -= deltaX/100;
-            if (g_phi < DegToRad(80) && g_phi > -DegToRad(80)) {
+            if (g_phi < DegToRad(60) && g_phi > -DegToRad(80)) {
                 g_phi += deltaY/100;
             }
-            if (g_phi >= DegToRad(80) && deltaY < 0) {
+            if (g_phi >= DegToRad(60) && deltaY < 0) {
                 g_phi += deltaY/100;
             }
             if (g_phi <= DegToRad(80) && deltaY > 0) {
@@ -360,12 +448,13 @@ public:
 
     void computeLookAt() {
         // float radius = 1.0;
-        float radius = 2;
+        float radius = 1.4;
         dummyRot = -g_theta;
         float x = radius*cos(g_phi)*cos(g_theta);
         float y = radius*sin(g_phi);
         float z = radius*cos(g_phi)*cos((PI/2.0)-g_theta);
         g_eye = g_lookAt - vec3(x, y, z);
+        gaze = g_eye - g_lookAt;
         // g_lookAt = vec3(x, y, z) + g_eye;
     }
 
@@ -376,156 +465,110 @@ public:
 
     void setTextures(const std::string& resourceDirectory) {
         //read in a load the texture
-		texture0 = make_shared<Texture>();
-  		texture0->setFilename(resourceDirectory + "/grass_low.jpg");
-  		texture0->init();
-  		texture0->setUnit(0);
-  		texture0->setWrapModes(GL_REPEAT, GL_REPEAT);
-
-  		brownWood = make_shared<Texture>();
-  		brownWood->setFilename(resourceDirectory + "/cartoonWood.jpg");
-  		brownWood->init();
-  		brownWood->setUnit(1);
-  		brownWood->setWrapModes(GL_CLAMP_TO_EDGE, GL_CLAMP_TO_EDGE);
-
         brick = make_shared<Texture>();
   		brick->setFilename(resourceDirectory + "/brickHouse/campiangatebrick1.jpg");
   		brick->init();
-  		brick->setUnit(2);
+  		brick->setUnit(0);
   		brick->setWrapModes(GL_REPEAT, GL_REPEAT);
         textureMap.insert(pair<string, shared_ptr<Texture>>("campiangatebrick1.jpg", brick));
 
         blackText = make_shared<Texture>();
   		blackText->setFilename(resourceDirectory + "/brickHouse/063.jpg");
   		blackText->init();
-  		blackText->setUnit(3);
+  		blackText->setUnit(1);
   		blackText->setWrapModes(GL_CLAMP_TO_EDGE, GL_CLAMP_TO_EDGE);
         textureMap.insert(pair<string, shared_ptr<Texture>>("063.JPG", blackText));
 
         lightWood = make_shared<Texture>();
   		lightWood->setFilename(resourceDirectory + "/brown_wood.jpg");
   		lightWood->init();
-  		lightWood->setUnit(4);
+  		lightWood->setUnit(2);
   		lightWood->setWrapModes(GL_CLAMP_TO_EDGE, GL_CLAMP_TO_EDGE);
-
-        leaf = make_shared<Texture>();
-  		leaf->setFilename(resourceDirectory + "/tree/maple_leaf.png");
-  		leaf->init();
-  		leaf->setUnit(5);
-  		leaf->setWrapModes(GL_CLAMP_TO_EDGE, GL_CLAMP_TO_EDGE);
-
-        road = make_shared<Texture>();
-  		road->setFilename(resourceDirectory + "/driveway2.jpg");
-  		road->init();
-  		road->setUnit(6);
-  		road->setWrapModes(GL_REPEAT, GL_REPEAT);
 
         bumpBrick = make_shared<Texture>();
   		bumpBrick->setFilename(resourceDirectory + "/brickHouse/campiangatebrick1_bump.jpg");
   		bumpBrick->init();
-  		bumpBrick->setUnit(7);
+  		bumpBrick->setUnit(3);
   		bumpBrick->setWrapModes(GL_CLAMP_TO_EDGE, GL_CLAMP_TO_EDGE);
         textureMap.insert(pair<string, shared_ptr<Texture>>("campiangatebrick1_bump.jpg", bumpBrick));
 
         whiteText = make_shared<Texture>();
   		whiteText->setFilename(resourceDirectory + "/brickHouse/HighBuild_texture.jpg");
   		whiteText->init();
-  		whiteText->setUnit(8);
+  		whiteText->setUnit(4);
   		whiteText->setWrapModes(GL_CLAMP_TO_EDGE, GL_CLAMP_TO_EDGE);
         textureMap.insert(pair<string, shared_ptr<Texture>>("HighBuild_texture.jpg", whiteText));
 
         tiles = make_shared<Texture>();
   		tiles->setFilename(resourceDirectory + "/brickHouse/panTiles_1024_more_red.jpg");
   		tiles->init();
-  		tiles->setUnit(9);
+  		tiles->setUnit(5);
   		tiles->setWrapModes(GL_REPEAT, GL_REPEAT);
         textureMap.insert(pair<string, shared_ptr<Texture>>("panTiles_1024_more_red.jpg", tiles));
 
         stone = make_shared<Texture>();
   		stone->setFilename(resourceDirectory + "/brickHouse/stones006x04.jpg");
   		stone->init();
-  		stone->setUnit(10);
+  		stone->setUnit(6);
   		stone->setWrapModes(GL_CLAMP_TO_EDGE, GL_CLAMP_TO_EDGE);
         textureMap.insert(pair<string, shared_ptr<Texture>>("stones006x04.jpg", stone));
-
-        lamp = make_shared<Texture>();
-  		lamp->setFilename(resourceDirectory + "/diffuse_streetlamp.jpg");
-  		lamp->init();
-  		lamp->setUnit(11);
-  		lamp->setWrapModes(GL_CLAMP_TO_EDGE, GL_CLAMP_TO_EDGE);
 
         whiteWood = make_shared<Texture>();
   		whiteWood->setFilename(resourceDirectory + "/white_wood.jpg");
   		whiteWood->init();
-  		whiteWood->setUnit(12);
+  		whiteWood->setUnit(7);
   		whiteWood->setWrapModes(GL_REPEAT, GL_REPEAT);
 
         glass = make_shared<Texture>();
   		glass->setFilename(resourceDirectory + "/glass.jpg");
   		glass->init();
-  		glass->setUnit(13);
+  		glass->setUnit(8);
   		glass->setWrapModes(GL_CLAMP_TO_EDGE, GL_CLAMP_TO_EDGE);
-
-        hedge = make_shared<Texture>();
-  		hedge->setFilename(resourceDirectory + "/hedge.jpg");
-  		hedge->init();
-  		hedge->setUnit(14);
-  		hedge->setWrapModes(GL_CLAMP_TO_EDGE, GL_CLAMP_TO_EDGE);
 
         dirt = make_shared<Texture>();
   		dirt->setFilename(resourceDirectory + "/ground.jpg");
   		dirt->init();
-  		dirt->setUnit(15);
+  		dirt->setUnit(9);
   		dirt->setWrapModes(GL_REPEAT, GL_REPEAT);
-
-        statueTex = make_shared<Texture>();
-  		statueTex->setFilename(resourceDirectory + "/statue/statue.jpg");
-  		statueTex->init();
-  		statueTex->setUnit(16);
-  		statueTex->setWrapModes(GL_CLAMP_TO_EDGE, GL_CLAMP_TO_EDGE);
 
         statueTex2 = make_shared<Texture>();
   		statueTex2->setFilename(resourceDirectory + "/statue2/mm_facade_sculpture_03_diffus.jpg");
   		statueTex2->init();
-  		statueTex2->setUnit(17);
+  		statueTex2->setUnit(10);
   		statueTex2->setWrapModes(GL_CLAMP_TO_EDGE, GL_CLAMP_TO_EDGE);
 
         spruceLeaf = make_shared<Texture>();
   		spruceLeaf->setFilename(resourceDirectory + "/Spruce_obj/Spruce_branches.png");
   		spruceLeaf->init();
-  		spruceLeaf->setUnit(18);
+  		spruceLeaf->setUnit(11);
   		spruceLeaf->setWrapModes(GL_REPEAT, GL_REPEAT);
         textureMap.insert(pair<string, shared_ptr<Texture>>("Spruce_branches.png", spruceLeaf));
 
         spruceTrunk = make_shared<Texture>();
   		spruceTrunk->setFilename(resourceDirectory + "/Spruce_obj/Spruce_trunk.jpeg");
   		spruceTrunk->init();
-  		spruceTrunk->setUnit(19);
+  		spruceTrunk->setUnit(12);
   		spruceTrunk->setWrapModes(GL_REPEAT, GL_REPEAT);
         textureMap.insert(pair<string, shared_ptr<Texture>>("Spruce_trunk.jpeg", spruceTrunk));
-
-        firLeaf = make_shared<Texture>();
-  		firLeaf->setFilename(resourceDirectory + "/fir/branch.png");
-  		firLeaf->init();
-  		firLeaf->setUnit(20);
-  		firLeaf->setWrapModes(GL_REPEAT, GL_REPEAT);
-
-        firTrunk = make_shared<Texture>();
-  		firTrunk->setFilename(resourceDirectory + "/fir/bark.jpg");
-  		firTrunk->init();
-  		firTrunk->setUnit(21);
-  		firTrunk->setWrapModes(GL_REPEAT, GL_REPEAT);
 
         axeTex = make_shared<Texture>();
   		axeTex->setFilename(resourceDirectory + "/axe/axe.png");
   		axeTex->init();
-  		axeTex->setUnit(22);
+  		axeTex->setUnit(13);
   		axeTex->setWrapModes(GL_CLAMP_TO_EDGE, GL_CLAMP_TO_EDGE);
+
+        texture = make_shared<Texture>();
+		texture->setFilename(resourceDirectory + "/mask.png");
+		texture->init();
+		texture->setUnit(14);
+		texture->setWrapModes(GL_CLAMP_TO_EDGE, GL_CLAMP_TO_EDGE);
     }
 
 	void init(const std::string& resourceDirectory)
 	{
 		GLSL::checkVersion();
+
+        rDir = resourceDirectory;
 
 		// Set background color.
 		glClearColor(.72f, .84f, 1.06f, 1.0f);
@@ -546,7 +589,10 @@ public:
 		prog->addUniform("MatDif");
 		prog->addUniform("MatSpec");
 		prog->addUniform("MatShine");
+        prog->addUniform("D");
 		prog->addUniform("lightPos");
+        prog->addUniform("moonLight");
+        prog->addUniform("camLight");
 		prog->addAttribute("vertPos");
 		prog->addAttribute("vertNor");
 
@@ -562,7 +608,10 @@ public:
 		texProg->addUniform("flip");
 		texProg->addUniform("Texture0");
 		texProg->addUniform("MatShine");
+        texProg->addUniform("D");
 		texProg->addUniform("lightPos");
+        texProg->addUniform("moonLight");
+        texProg->addUniform("camLight");
 		texProg->addAttribute("vertPos");
 		texProg->addAttribute("vertNor");
 		texProg->addAttribute("vertTex");
@@ -589,18 +638,47 @@ public:
 		progInst->addUniform("V");
         progInst->addUniform("Texture0");
 		progInst->addUniform("MatShine");
+        progInst->addUniform("D");
         progInst->addUniform("lightPos");
+        progInst->addUniform("moonLight");
+        progInst->addUniform("camLight");
 		progInst->addAttribute("vertPos");
 		progInst->addAttribute("vertNor");
         progInst->addAttribute("vertTex");
 		progInst->addAttribute("instanceMatrix");
 
+        glyphProg = make_shared<Program>();
+		glyphProg->setVerbose(true);
+        glyphProg->setShaderNames(resourceDirectory + "/glyph_vert.glsl", resourceDirectory + "/glyph_frag.glsl");
+		glyphProg->init();
+        glyphProg->addUniform("P");
+        glyphProg->addUniform("text");
+        glyphProg->addUniform("textColor");
+        glyphProg->addAttribute("vertex");
+        
+        writer = new TextGen(&ft, glyphProg);
+
+        // Enable z-buffer test.
+		CHECKED_GL_CALL(glEnable(GL_BLEND));
+		CHECKED_GL_CALL(glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA));
+		CHECKED_GL_CALL(glPointSize(24.0f));
+
+        partProg = make_shared<Program>();
+		partProg->setVerbose(true);
+		partProg->setShaderNames(resourceDirectory + "/lab10_vert.glsl", resourceDirectory + "/lab10_frag.glsl");
+		partProg->init();
+		partProg->addUniform("P");
+		partProg->addUniform("M");
+		partProg->addUniform("V");
+		partProg->addUniform("alphaTexture");
+		partProg->addAttribute("vertPos");
+        partProg->addAttribute("pColor");
+
   		// init splines up and down
-    //    splinepath[0] = Spline(glm::vec3(-6,3,5), glm::vec3(-1,0,5), glm::vec3(1, 5, 5), glm::vec3(3,3,5), 5);
-    //    splinepath[1] = Spline(glm::vec3(3,3,5), glm::vec3(4,1,5), glm::vec3(-0.75, 0.25, 5), glm::vec3(0,0,5), 5);
-        splinepath[0] = Spline(glm::vec3(-20,12,-20), glm::vec3(-10,10,-10), glm::vec3(0, 8, 0), glm::vec3(10,6,10), 5);
-        splinepath[1] = Spline(glm::vec3(10,6,10), glm::vec3(20,4,20), glm::vec3(25, 2, 30), glm::vec3(16,0,33), 5);
-    
+        splinepath[0] = Spline(glm::vec3(-20,12,-20), glm::vec3(-10,10,-10), glm::vec3(0, 8, 0), glm::vec3(10,6,10), 3);
+        splinepath[1] = Spline(glm::vec3(10,6,10), glm::vec3(20,4,20), glm::vec3(25, 2, 30), glm::vec3(16,-1.25+camY,27.25+camZ), 3);
+
+        //engine->play2D("forest.mp3", true); 
 	}
 
     unsigned int createSky(string dir, vector<string> faces) {
@@ -627,38 +705,38 @@ public:
     }
 
     void initKeyframes() {
-        vector<float> arms{0, PI/8.0, 0, -PI/8.0};
+        vector<float> arms{-PI/8.0, 0, PI/8.0, 0};
         for (int i=0; i < arms.size(); i++) {
-            Keyframe tmp = Keyframe(arms[i], arms[i+1], frameDur);
+            Keyframe tmp = Keyframe(arms[i], arms[i+1], frameDur, "arm");
             if (i == arms.size()-1)
-               tmp = Keyframe(arms[i], arms[0], frameDur);
+               tmp = Keyframe(arms[i], arms[0], frameDur, "arm"+std::to_string(i));
             lArmKF.push_back(tmp);
             rArmKF.push_back(tmp);
         }
         vector<float> legs{PI/6.0, 0, -PI/6.0, 0};
         for (int i=0; i < legs.size(); i++) {
-            Keyframe tmp = Keyframe(legs[i], legs[i+1], frameDur);
+            Keyframe tmp = Keyframe(legs[i], legs[i+1], frameDur, "lLeg"+std::to_string(i));
             if (i == legs.size()-1)
-                tmp = Keyframe(legs[i], legs[0], frameDur);
+                tmp = Keyframe(legs[i], legs[0], frameDur, "lLeg"+std::to_string(i));
             lLegKF.push_back(tmp);
 
-            Keyframe tmp2 = Keyframe(-1*legs[i], -1*legs[i+1], frameDur);
+            Keyframe tmp2 = Keyframe(-1*legs[i], -1*legs[i+1], frameDur, "rLeg"+std::to_string(i));
             if (i == legs.size()-1)
-                tmp2 = Keyframe(-1*legs[i], -1*legs[0], frameDur);
+                tmp2 = Keyframe(-1*legs[i], -1*legs[0], frameDur, "rLeg"+std::to_string(i));
             rLegKF.push_back(tmp2);
         }
         vector<float> lKnee{0, PI/3.0, 0, 0};
         for (int i=0; i < lKnee.size(); i++) {
-            Keyframe tmp = Keyframe(lKnee[i], lKnee[i+1], frameDur);
+            Keyframe tmp = Keyframe(lKnee[i], lKnee[i+1], frameDur, "lKnee"+std::to_string(i));
             if (i == lKnee.size()-1)
-                tmp = Keyframe(lKnee[i], lKnee[0], frameDur);
+                tmp = Keyframe(lKnee[i], lKnee[0], frameDur, "lKnee"+std::to_string(i));
             lKneeKF.push_back(tmp);
         }
         vector<float> rKnee{0, 0, 0, PI/3.0};
         for (int i=0; i < rKnee.size(); i++) {
-            Keyframe tmp = Keyframe(rKnee[i], rKnee[i+1], frameDur);
+            Keyframe tmp = Keyframe(rKnee[i], rKnee[i+1], frameDur, "rKnee"+std::to_string(i));
             if (i == rKnee.size()-1)
-                tmp = Keyframe(rKnee[i], rKnee[0], frameDur);
+                tmp = Keyframe(rKnee[i], rKnee[0], frameDur, "rKnee"+std::to_string(i));
             rKneeKF.push_back(tmp);
         }
     }
@@ -717,6 +795,20 @@ public:
 			cubeTex->init();
 		}
 
+        rc = tinyobj::LoadObj(TOshapes, carMat, errStr, (resourceDirectory + "/car/car.obj").c_str(), (resourceDirectory + "/car/").c_str());
+        if (!rc) {
+			cerr << errStr << endl;
+		} else {
+            for (int i = 0; i < TOshapes.size(); i++) {
+                shared_ptr<Shape> tmp = make_shared<Shape>();
+                tmp->createShape(TOshapes[i]);
+                tmp->measure();
+                tmp->init();
+                
+                carMesh.push_back(tmp);
+            }
+		}
+
         float numSlots = 961;
         modelMatrices = new glm::mat4[numSlots];
         float rowSize = 31.0f;
@@ -737,7 +829,6 @@ public:
 		}
 
         rc = tinyobj::LoadObj(TOshapes, treeMat, errStr, (resourceDirectory + "/Spruce_obj/Spruce.obj").c_str(), (resourceDirectory + "/Spruce_obj/").c_str());
-        // rc = tinyobj::LoadObj(TOshapes, objMaterials, errStr, (resourceDirectory + "/fir/fir.obj").c_str());
   		if (!rc) {
     		cerr << errStr << endl;
   		} else {
@@ -773,8 +864,9 @@ public:
                 tmp->measure();
                 tmp->init();
 
-                dummyMin.push_back(tmp->min);
-                dummyMax.push_back(tmp->max);
+                findMin(tmp->min.x, tmp->min.y, tmp->min.z);
+                findMax(tmp->max.x, tmp->max.y, tmp->max.z);
+
                 dummyMesh.push_back(tmp);
             }
 		}
@@ -803,7 +895,7 @@ public:
             lampMesh->init();
 		}
 
-        cubeMapTexture = createSky("../resources/sky/", faces);
+        cubeMapTexture = createSky("../resources/cloudy/", faces);
 
 		//code to load in the ground plane (CPU defined data passed to GPU)
 		initGround();
@@ -811,10 +903,28 @@ public:
         initKeyframes();
 	}
 
+    void findMin(float x, float y, float z) {
+        if (x < dummyMin.x)
+            dummyMin.x = x;
+        if (y < dummyMin.y)
+            dummyMin.y = y;
+        if (z < dummyMin.z)
+            dummyMin.z = z;
+    }
+
+    void findMax(float x, float y, float z) {
+        if (x > dummyMax.x)
+            dummyMax.x = x;
+        if (y > dummyMax.y)
+            dummyMax.y = y;
+        if (z > dummyMax.z)
+            dummyMax.z = z;
+    }
+
 	//directly pass quad for the ground to the GPU
 	void initGround() {
 
-		float g_groundSize = 35;
+		float g_groundSize = 65;
 		float g_groundY = -0.25;
 
   		// A x-z plane at y = g_groundY of dimension [-g_groundSize, g_groundSize]^2
@@ -903,18 +1013,30 @@ public:
     			glUniform3f(curS->getUniform("MatSpec"), 0.45, 0.23, 0.45);
     			glUniform1f(curS->getUniform("MatShine"), 120.0);
     		break;
-    		case 1: // pink
-    			glUniform3f(curS->getUniform("MatAmb"), 0.063, 0.038, 0.1);
-    			glUniform3f(curS->getUniform("MatDif"), 0.63, 0.38, 1.0);
-    			glUniform3f(curS->getUniform("MatSpec"), 0.3, 0.2, 0.5);
-    			glUniform1f(curS->getUniform("MatShine"), 4.0);
+    		case 1: // red rubber
+    			glUniform3f(curS->getUniform("MatAmb"), 0.05f, 0.0f, 0.0f);
+    			glUniform3f(curS->getUniform("MatDif"), 0.5f, 0.4f, 0.4f);
+    			glUniform3f(curS->getUniform("MatSpec"), 0.7f, 0.04f, 0.04f);
+    			glUniform1f(curS->getUniform("MatShine"), 10.0);
     		break;
-    		case 2: 
+    		case 2: // blue
     			glUniform3f(curS->getUniform("MatAmb"), 0.004, 0.05, 0.09);
     			glUniform3f(curS->getUniform("MatDif"), 0.04, 0.5, 0.9);
     			glUniform3f(curS->getUniform("MatSpec"), 0.02, 0.25, 0.45);
     			glUniform1f(curS->getUniform("MatShine"), 27.9);
     		break;
+            case 3: // perl
+                glUniform3f(curS->getUniform("MatAmb"), 0.25f, 0.20725f, 0.20725f);
+    			glUniform3f(curS->getUniform("MatDif"), 1.0f, 0.829f, 0.829f);
+    			glUniform3f(curS->getUniform("MatSpec"), 0.296648f, 0.296648f, 0.296648f);
+    			glUniform1f(curS->getUniform("MatShine"), 11.264f);
+            break;
+            case 4: // black rubber
+                glUniform3f(curS->getUniform("MatAmb"), 0.02f, 0.02f, 0.02f);
+    			glUniform3f(curS->getUniform("MatDif"), 0.01f, 0.01f, 0.01f);
+    			glUniform3f(curS->getUniform("MatSpec"), 0.4f, 0.4f, 0.4f);
+    			glUniform1f(curS->getUniform("MatShine"), 10.0f);
+            break;
   		}
 	}
 
@@ -956,8 +1078,10 @@ public:
     void drawHouse(shared_ptr<MatrixStack> Model, shared_ptr<Program> drawProg) {
         Model->pushMatrix();
             Model->pushMatrix();
-                Model->translate(vec3(0, -1.25, -7));
-                Model->scale(vec3(0.25, 0.25, 0.25));
+                vec3 pos = mapSpaces(0, 17);
+                //Model->translate(vec3(0, -1.25, -7));
+                Model->translate(vec3(pos.x, -1.25, pos.z - 10));
+                Model->scale(vec3(0.35, 0.35, 0.35));
 
                 setModel(drawProg, Model);
                 for (int i=0; i < houseMesh.size(); i++) {
@@ -995,174 +1119,201 @@ public:
         return vec3(x, -1.2, z);
     }
 
-    void drawLamps(shared_ptr<MatrixStack> Model, shared_ptr<Program> prog) {
-        Model->pushMatrix();
+    vec3 findCenter(int i) {
+        float x = (dummyMesh[i]->max.x + dummyMesh[i]->min.x)/2;
+        float y = (dummyMesh[i]->max.y + dummyMesh[i]->min.y)/2;
+        float z = (dummyMesh[i]->max.z + dummyMesh[i]->min.z)/2;
+        return vec3(x, y, z);
+    }
 
-            float zVals[4] = {15, 9, 3, -3};
-            lamp->bind(prog->getUniform("Texture0"));
-            glUniform1f(prog->getUniform("MatShine"), 120);
-
-            for (int l=0; l < 4; l++) {
-                Model->pushMatrix();
-                    Model->translate(vec3(4.5, -1.25, zVals[l]));
-                    Model->scale(vec3(1, 1, 1));
-                    setModel(prog, Model);
-                    lampMesh->draw(prog);
-                Model->popMatrix();
+    void interpolateGroup() {
+        if (isNewFrame) {
+            isNewFrame = false;
+            startTime = glfwGetTime();
+        }
+        float currTime = glfwGetTime();
+        float percentDone = (currTime-startTime) / frameDur;
+        if (percentDone > 1) {
+            overallFrame = (++overallFrame)%4;
+            isNewFrame = true;
+            if (overallFrame == 1 || overallFrame == 3)
+                isWalking = false; 
+        } else {
+            for (int i=0; i < limbRot.size(); i++) {
+                Keyframe k;
+                if (i == 0)
+                    k = lArmKF[overallFrame];
+                else if (i == 1)
+                    k = rArmKF[overallFrame];
+                else if (i == 2)
+                    k = lLegKF[overallFrame];
+                else if (i == 3)
+                    k = lKneeKF[overallFrame];
+                else if (i == 4)
+                    k = rLegKF[overallFrame];
+                else
+                    k = rKneeKF[overallFrame];
+                float diff = k.returnEnd() - k.returnStart();
+                limbRot[i] = k.returnStart() + (percentDone*diff); 
             }
+        }
+    }
 
-            for (int r=0; r < 4; r++) {
-                Model->pushMatrix();
-                    Model->translate(vec3(-4.5, -1.25, zVals[r]));
-                    Model->rotate(3.14159, vec3(0, 1, 0));
-                    Model->scale(vec3(1, 1, 1));
-                    setModel(prog, Model);
-                    lampMesh->draw(prog);
-                Model->popMatrix();
+    void drawLeftArm(shared_ptr<MatrixStack> Model, shared_ptr<Program> prog, float frametime) {
+        //  KEYFRAMES X-AXIS: -PI/2.4 (arm to side),
+        //  KEYFRAMES Z-AXIS: none, PI/8.0, none, -PI/8.0
+        Model->pushMatrix();
+            Model->translate(vec3(1.0f*dummyMesh[21]->min.x, 1.0f*dummyMesh[21]->min.y, 1.0f*dummyMesh[21]->max.z));
+            Model->rotate(-PI/2.4, vec3(1, 0, 0));
+            Model->rotate(limbRot[0], vec3(0, 0, 1));
+            Model->translate(vec3(-1.0f*dummyMesh[21]->min.x, -1.0f*dummyMesh[21]->min.y, -1.0f*dummyMesh[21]->max.z));
+            setModel(prog, Model);
+            for (int i=21; i <=26; i++) {
+                if (i < 23)
+                    SetMaterial(prog, 1);
+                else
+                    SetMaterial(prog, 3);
+                dummyMesh[i]->draw(prog);
             }
         Model->popMatrix();
     }
 
-    vec3 findCenter(int i) {
-        float x = (dummyMesh[i]->max.x - dummyMesh[i]->min.x)/2;
-        float y = (dummyMesh[i]->max.y - dummyMesh[i]->min.y)/2;
-        float z = (dummyMesh[i]->max.z - dummyMesh[i]->min.z)/2;
-        return vec3(x, y, z);
+    void drawRightArm(shared_ptr<MatrixStack> Model, shared_ptr<Program> prog, float frametime) {
+        //  KEYFRAMES X-AXIS: PI/2.4 (arm to side)
+        //  KEYFRAMES Z-AXIS: none, PI/8.0, none, -PI/8.0
+        Model->pushMatrix();
+            Model->translate(vec3(1.0f*dummyMesh[15]->max.x, 1.0f*dummyMesh[15]->max.y, 1.0f*dummyMesh[15]->max.z));
+            Model->rotate(PI/2.4, vec3(1, 0, 0));
+            Model->rotate(limbRot[1], vec3(0, 0, 1));
+            Model->translate(vec3(-1.0f*dummyMesh[15]->max.x, -1.0f*dummyMesh[15]->max.y, -1.0f*dummyMesh[15]->max.z));
+            setModel(prog, Model);
+            for (int i=15; i <=20; i++) {
+                if (i < 17)
+                    SetMaterial(prog, 1);
+                else
+                    SetMaterial(prog, 3);
+                dummyMesh[i]->draw(prog);
+            }
+        Model->popMatrix();
     }
 
-    void handleInterpolation(Keyframe &k, float frametime, shared_ptr<MatrixStack> Model, vec3 axis, string limb) {
-        // if (newFrame) {
-        //     newFrame = false;
-        //     k->setStart(glfwGetTime());
-        //     cout << limb << endl;
-        //     cout << "START: " << glfwGetTime() << endl;
-        // }
-        // float angle = k->interpolate(glfwGetTime());
-        // if (angle != RAND_MAX) {
-        //     Model->rotate(angle, axis);
-        // } else {
-        //     frame = (++frame)%4;
-        //     newFrame = true;
-        // }
-        if (newFrame) {
-            newFrame = false;
-            k.setStart(glfwGetTime());
-            cout << limb << endl;
-            cout << "START: " << glfwGetTime() << endl;
-        }
-        float angle = k.interpolate(glfwGetTime());
-        if(!k.isDone()){
-            Model->rotate(angle, axis);
-        } else {
-            frame = (++frame)%4;
-            newFrame = true;
-        }
+    void drawLeftLeg(shared_ptr<MatrixStack> Model, shared_ptr<Program> prog, float frametime) {
+        //  KEYFRAMES: PI/6.0 (leg backward), none (but knee bent), -PI/10.0, -PI/6.0, none,
+        Model->pushMatrix();
+            Model->translate(vec3(1.0f*dummyMesh[11]->min.x, 1.0f*dummyMesh[11]->min.y, 1.0f*dummyMesh[11]->max.z));
+            Model->rotate(limbRot[2], vec3(0, 1, 0));
+            Model->translate(vec3(-1.0f*dummyMesh[11]->min.x, -1.0f*dummyMesh[11]->min.y, -1.0f*dummyMesh[11]->max.z));
+            setModel(prog, Model);
+            SetMaterial(prog, 2);
+            dummyMesh[11]->draw(prog); // pelvis
+            dummyMesh[10]->draw(prog); // upper leg
+
+            // KEYFRAMES: none, PI/3.0, PI/4.0, none, none, 
+            Model->translate(vec3(1.0f*dummyMesh[9]->max.x, 1.0f*dummyMesh[9]->min.y, 1.0f*dummyMesh[9]->max.z));
+            Model->rotate(limbRot[3], vec3(0, 1, 0));
+            Model->translate(vec3(-1.0f*dummyMesh[9]->max.x, -1.0f*dummyMesh[9]->min.y, -1.0f*dummyMesh[9]->max.z));
+            setModel(prog, Model);
+            SetMaterial(prog, 2);
+            for (int i=6; i <=9; i++) {
+                if (i == 6)
+                    SetMaterial(prog, 4);
+                else
+                    SetMaterial(prog, 2);
+                dummyMesh[i]->draw(prog);
+            }
+        Model->popMatrix();
+    }
+
+    void drawRightLeg(shared_ptr<MatrixStack> Model, shared_ptr<Program> prog, float frametime) {
+        //  KEYFRAMES: -PI/6.0 (leg forward), none, none, PI/6.0, none (but knee bent)
+        Model->pushMatrix();
+            Model->translate(vec3(1.0f*dummyMesh[5]->max.x, 1.0f*dummyMesh[5]->max.y, 1.0f*dummyMesh[5]->max.z));
+            Model->rotate(limbRot[4], vec3(0, 1, 0));
+            Model->translate(vec3(-1.0f*dummyMesh[5]->max.x, -1.0f*dummyMesh[5]->max.y, -1.0f*dummyMesh[5]->max.z));
+            setModel(prog, Model);
+            SetMaterial(prog, 2);
+            dummyMesh[5]->draw(prog); // pelvis
+            dummyMesh[4]->draw(prog); // upper leg
+
+            // KEYFRAMES: none, none, none, none, PI/3.0
+            Model->translate(vec3(1.0f*dummyMesh[9]->max.x, 1.0f*dummyMesh[9]->min.y, 1.0f*dummyMesh[9]->max.z));
+            Model->rotate(limbRot[5], vec3(0, 1, 0));
+            Model->translate(vec3(-1.0f*dummyMesh[9]->max.x, -1.0f*dummyMesh[9]->min.y, -1.0f*dummyMesh[9]->max.z));
+            setModel(prog, Model);
+            for (int i=0; i <=3; i++) {
+                if (i == 0)
+                    SetMaterial(prog, 4);
+                else
+                    SetMaterial(prog, 2);
+                dummyMesh[i]->draw(prog);
+            }
+        Model->popMatrix();
     }
 
     void drawDummy(shared_ptr<MatrixStack> Model, shared_ptr<Program> prog, float frametime) {
-        vec3 tmp;
-        //int frame = (int)(glfwGetTime()*5)%6;
+        if (isWalking)
+            interpolateGroup();
         Model->pushMatrix();
             Model->translate(vec3(dummyLoc.x, dummyLoc.y, dummyLoc.z));
-            //Model->translate(vec3((g_eye.x+(speed*view.x)), -1.25, (g_eye.z+(speed*view.z))));
             Model->scale(vec3(0.01, 0.01, 0.01));
             Model->rotate(dummyRot, vec3(0, 1, 0));
             // Model->rotate(-PI/2.0, vec3(0, 1, 0)); FIRST PERSON
             Model->rotate(-PI/2.0, vec3(1, 0, 0));
             setModel(prog, Model);
             for (int i=12; i <= 14; i++) {
+                if (i == 12)
+                    SetMaterial(prog, 2);
+                else
+                    SetMaterial(prog, 1);
                 dummyMesh[i]->draw(prog);
             }
+            SetMaterial(prog, 3);
             dummyMesh[27]->draw(prog); // neck
             dummyMesh[28]->draw(prog); // head
 
-            // LEFT ARM
-            //  KEYFRAMES X-AXIS: -PI/2.4 (arm to side),
-            //  KEYFRAMES Z-AXIS: none, PI/8.0, none, -PI/8.0
-            Model->pushMatrix();
-                Model->translate(vec3(1.0f*dummyMesh[21]->min.x, 1.0f*dummyMesh[21]->min.y, 1.0f*dummyMesh[21]->max.z));
-                Model->rotate(-PI/2.4, vec3(1, 0, 0));
-                // Model->rotate(-PI/8.0, vec3(0, 0, 1));
-                // Model->rotate(lArmKF[frame], vec3(0, 0, 1));
-                // handleInterpolation(lArmKF[frame], frametime, Model, vec3(0, 0, 1), "Left arm");
-                Model->translate(vec3(-1.0f*dummyMesh[21]->min.x, -1.0f*dummyMesh[21]->min.y, -1.0f*dummyMesh[21]->max.z));
-                setModel(prog, Model);
-                for (int i=21; i <=26; i++) {
-                    dummyMesh[i]->draw(prog);
-                }
-            Model->popMatrix();
-            // RIGHT ARM
-            //  KEYFRAMES X-AXIS: PI/2.4 (arm to side)
-            //  KEYFRAMES Z-AXIS: none, PI/8.0, none, -PI/8.0
-            Model->pushMatrix();
-                tmp = findCenter(15);
-                Model->translate(vec3(1.0f*dummyMesh[15]->max.x, 1.0f*dummyMesh[15]->max.y, 1.0f*dummyMesh[15]->max.z));
-                Model->rotate(PI/2.4, vec3(1, 0, 0));
-                //Model->rotate(-PI/8.0, vec3(0, 0, 1));
-                // handleInterpolation(rArmKF[frame], frametime, Model, vec3(0, 0, 1), "Right arm");
-                // Model->rotate(rArmKF[frame], vec3(0, 0, 1));
-                Model->translate(vec3(-1.0f*dummyMesh[15]->max.x, -1.0f*dummyMesh[15]->max.y, -1.0f*dummyMesh[15]->max.z));
-                setModel(prog, Model);
-                for (int i=15; i <=20; i++) {
-                    dummyMesh[i]->draw(prog);
-                }
-            Model->popMatrix();
-            // LEFT LEG
-            //  KEYFRAMES: PI/6.0 (leg backward), none (but knee bent), -PI/10.0, -PI/6.0, none,
-            Model->pushMatrix();
-                Model->translate(vec3(1.0f*dummyMesh[11]->min.x, 1.0f*dummyMesh[11]->min.y, 1.0f*dummyMesh[11]->max.z));
-                // Model->rotate(lLegKF[frame], vec3(0, 1, 0));
-                // handleInterpolation(lLegKF[frame], frametime, Model, vec3(0, 1, 0), "Left leg");
-                Model->translate(vec3(-1.0f*dummyMesh[11]->min.x, -1.0f*dummyMesh[11]->min.y, -1.0f*dummyMesh[11]->max.z));
-                setModel(prog, Model);
-                dummyMesh[11]->draw(prog); // pelvis
-                dummyMesh[10]->draw(prog); // upper leg
+            drawLeftArm(Model, prog, frametime);
+            drawRightArm(Model, prog, frametime);
+            
+            drawLeftLeg(Model, prog, frametime);
+            drawRightLeg(Model, prog, frametime);
+        Model->popMatrix();
+    }
 
-                // KEYFRAMES: none, PI/3.0, PI/4.0, none, none, 
-                Model->translate(vec3(1.0f*dummyMesh[9]->max.x, 1.0f*dummyMesh[9]->min.y, 1.0f*dummyMesh[9]->max.z));
-                // Model->rotate(lKneeKF[frame], vec3(0, 1, 0));
-                // handleInterpolation(lKneeKF[frame], frametime, Model, vec3(0, 1, 0), "Left knee");
-                Model->translate(vec3(-1.0f*dummyMesh[9]->max.x, -1.0f*dummyMesh[9]->min.y, -1.0f*dummyMesh[9]->max.z));
-                setModel(prog, Model);
-                for (int i=6; i <=9; i++) {
-                    dummyMesh[i]->draw(prog);
-                }
-            Model->popMatrix();
-            // RIGHT LEG
-            //  KEYFRAMES: -PI/6.0 (leg forward), none, none, PI/6.0, none (but knee bent)
-            Model->pushMatrix();
-                tmp = findCenter(5);
-                Model->translate(vec3(1.0f*dummyMesh[5]->max.x, 1.0f*dummyMesh[5]->max.y, 1.0f*dummyMesh[5]->max.z));
-                // Model->rotate(rLegKF[frame], vec3(0, 1, 0));
-                // handleInterpolation(rLegKF[frame], frametime, Model, vec3(0, 1, 0), "Right leg");
-                Model->translate(vec3(-1.0f*dummyMesh[5]->max.x, -1.0f*dummyMesh[5]->max.y, -1.0f*dummyMesh[5]->max.z));
-                setModel(prog, Model);
-                dummyMesh[5]->draw(prog); // pelvis
-                dummyMesh[4]->draw(prog); // upper leg
+    void drawCar(shared_ptr<MatrixStack> Model, shared_ptr<Program> prog) {
+        driveTheta = 1.5*sin(glfwGetTime());
 
-                // KEYFRAMES: none, none, none, none, PI/3.0
-                Model->translate(vec3(1.0f*dummyMesh[9]->max.x, 1.0f*dummyMesh[9]->min.y, 1.0f*dummyMesh[9]->max.z));
-                // Model->rotate(rKneeKF[frame], vec3(0, 1, 0));
-                // handleInterpolation(rKneeKF[frame], frametime, Model, vec3(0, 1, 0), "Right knee");
-                Model->translate(vec3(-1.0f*dummyMesh[9]->max.x, -1.0f*dummyMesh[9]->min.y, -1.0f*dummyMesh[9]->max.z));
-                setModel(prog, Model);
-                for (int i=0; i <=3; i++) {
-                    dummyMesh[i]->draw(prog);
-                }
-            Model->popMatrix();
+        Model->pushMatrix();
+            vec3 pos = mapSpaces(0, 17);
+            Model->translate(vec3(pos.x, -0.5, pos.z - 4));
+            //Model->translate(vec3(2.7, -0.85, 2));
+            Model->translate(vec3(driveTheta, 0, 0));
+            Model->rotate(PI/2.0, vec3(0, 1, 0));
+            Model->scale(vec3(0.55, 0.55, 0.55));
+
+            setModel(prog, Model);
+            float diffuse[3] = {0.840000, 0.332781, 0.311726};
+            for (int i=0; i < carMesh.size(); i++) {
+                int mat = carMesh[i]->getMat()[0];
+                SetGenericMat(prog, carMat[mat].ambient, carMat[mat].diffuse, carMat[mat].specular, carMat[mat].shininess, "car");
+                carMesh[i]->draw(prog);
+            }
         Model->popMatrix();
     }
 
    	void updateUsingCameraPath(float frametime)  {
 
    	  if (goCamera) {
-        g_lookAt = vec3(16, 0, 30);
+        g_lookAt = vec3(dummyLoc.x, dummyLoc.y+camY, dummyLoc.z);
         if(!splinepath[0].isDone()){
        		splinepath[0].update(frametime);
             g_eye = splinepath[0].getPosition();
         } else {
             splinepath[1].update(frametime);
             g_eye = splinepath[1].getPosition();
+            if (splinepath[1].isDone()) {
+                goCamera = false;
+                gameStart = glfwGetTime();
+            }
         }
       }
    	}
@@ -1176,7 +1327,6 @@ public:
             while (getline(myfile, slot)) {
                 for (int j=0; j < slot.length(); j++) {
                     if (slot[j] == 'x') {
-                        numWalls++;
                         occupancy[i][j] = 1;
                     } else {
                         occupancy[i][j] = 0;
@@ -1187,6 +1337,27 @@ public:
             myfile.close();
         } else {
             cout << "Unable to open file" << endl;
+        }
+    }
+
+    string formatTime() {
+        float totalTime = 0;
+        if (timedGame)
+            totalTime = timer;
+        else
+            totalTime = gameEnd - gameStart;
+        int min = totalTime/60;
+        int sec = (int)totalTime%60;
+        if (sec < 10)
+            return std::to_string(min)+":0"+std::to_string(sec);
+        else
+            return std::to_string(min)+":"+std::to_string(sec);
+    }
+
+    void updateTimer(float frametime) {
+        timer -= frametime;
+        if (timer <= 0) {
+            lostGame = true;
         }
     }
 
@@ -1207,17 +1378,24 @@ public:
 		auto Model = make_shared<MatrixStack>();
 
 		//update the camera position
-		updateUsingCameraPath(frametime);
+        if (!startScreen)
+		    updateUsingCameraPath(frametime);
 
 		// Apply perspective projection.
 		Projection->pushMatrix();
 		Projection->perspective(45.0f, aspect, 0.01f, 100.0f);
 
+        if (timedGame && !lostGame && !gameOver) {
+            updateTimer(frametime);
+        }
+
 		texProg->bind();
             glUniformMatrix4fv(texProg->getUniform("P"), 1, GL_FALSE, value_ptr(Projection->topMatrix()));
             SetView(texProg);
-            // glUniform3f(texProg->getUniform("lightPos"), 3.0+lightTrans, 8.0, 7);
-            glUniform3f(texProg->getUniform("lightPos"), g_eye.x-0.5, g_eye.y, g_eye.z-0.5);
+            glUniform3f(texProg->getUniform("moonLight"), 0, 8, 0);
+            glUniform3f(texProg->getUniform("camLight"), g_eye.x, g_eye.y, g_eye.z);
+            glUniform3f(texProg->getUniform("lightPos"), dummyLoc.x, dummyLoc.y+camY, dummyLoc.z);
+            glUniform3f(texProg->getUniform("D"), dummyLoc.x + gaze.x, dummyLoc.y + gaze.y, dummyLoc.z + gaze.z);
             glUniform1i(texProg->getUniform("flip"), 1);
 
             // Model->pushMatrix();
@@ -1242,8 +1420,7 @@ public:
             //     }
             // Model->popMatrix();
 
-            // drawHouse(Model, texProg);
-            // drawLamps(Model, texProg);
+            //drawHouse(Model, texProg);
 
             // hedge->bind(texProg->getUniform("Texture0"));
             // for (int i=0; i < 31; i++) {
@@ -1283,18 +1460,16 @@ public:
         progInst->bind();
             glUniformMatrix4fv(progInst->getUniform("P"), 1, GL_FALSE, value_ptr(Projection->topMatrix()));
             SetView(progInst);
-            glUniform3f(progInst->getUniform("lightPos"), g_eye.x-0.5, g_eye.y, g_eye.z-0.5);
+            glUniform3f(progInst->getUniform("moonLight"), 0, 8, 0);
+            glUniform3f(progInst->getUniform("camLight"), g_eye.x, g_eye.y, g_eye.z);
+            glUniform3f(progInst->getUniform("lightPos"), dummyLoc.x, dummyLoc.y+camY, dummyLoc.z);
+            glUniform3f(progInst->getUniform("D"), dummyLoc.x + gaze.x, dummyLoc.y + gaze.y, dummyLoc.z + gaze.z);
             for (int i=0; i < cubeInst.size(); i++) {   
                 int mat = cubeInst[i]->getMat()[0];
                 SetGenericMat(progInst, treeMat[mat].ambient, treeMat[mat].diffuse, treeMat[mat].specular, treeMat[mat].shininess, "tree");
                 if (treeMat[mat].diffuse_texname != "") {
                     textureMap.at(treeMat[mat].diffuse_texname)->bind(progInst->getUniform("Texture0"));
                 }
-                // if (i==0) {
-                //     firTrunk->bind(progInst->getUniform("Texture0"));
-                // } else {
-                //     firLeaf->bind(progInst->getUniform("Texture0"));
-                // }
                 cubeInst[i]->draw(progInst);
             }
 		progInst->unbind();
@@ -1305,9 +1480,9 @@ public:
             glDepthFunc(GL_LEQUAL);
             SetView(cubeProg);
             Model->pushMatrix();
-            Model->translate(vec3(0, 0, 0));
+            Model->translate(vec3(0, -3, 0));
             Model->rotate(3.1416, vec3(0, 1, 0));
-            Model->scale(vec3(70, 70, 70));
+            Model->scale(vec3(80, 80, 80));
             glUniformMatrix4fv(cubeProg->getUniform("M"), 1, GL_FALSE,value_ptr(Model->topMatrix()));
             Model->popMatrix();
             glBindTexture(GL_TEXTURE_CUBE_MAP, cubeMapTexture);
@@ -1319,11 +1494,64 @@ public:
 
         prog->bind();
             glUniformMatrix4fv(prog->getUniform("P"), 1, GL_FALSE, value_ptr(Projection->topMatrix()));
-            glUniform3f(prog->getUniform("lightPos"), g_eye.x-0.5, g_eye.y, g_eye.z-0.5);
+            glUniform3f(prog->getUniform("moonLight"), 0, 8, 0);
+            glUniform3f(prog->getUniform("camLight"), g_eye.x, g_eye.y, g_eye.z);
+            glUniform3f(prog->getUniform("lightPos"), dummyLoc.x, dummyLoc.y+camY, dummyLoc.z);
+            glUniform3f(prog->getUniform("D"), dummyLoc.x + gaze.x, dummyLoc.y + gaze.y, dummyLoc.z + gaze.z);
             SetView(prog);
-            SetMaterial(prog, 2);
             drawDummy(Model, prog, frametime);
+            drawCar(Model, prog);
         prog->unbind();
+
+        glEnable(GL_BLEND);
+        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA); 
+
+        glyphProg->bind();
+            glm::mat4 projection = glm::ortho(0.0f, static_cast<GLfloat>(width), 0.0f, static_cast<GLfloat>(height));
+            glUniformMatrix4fv(glyphProg->getUniform("P"), 1, GL_FALSE, value_ptr(projection));
+            if (startScreen) {
+                writer->drawText(1, "Escape the Forest", width/2, height/2+85.0f, 1.0f, glm::vec3(1.0f, 1.0f, 1.0f));
+                writer->drawText(1, "Select Mode (Press 1 or 2):", width/2, height/2-20.0f, 0.45f, glm::vec3(1.0f, 1.0f, 1.0f));
+                writer->drawText(1, "Explore Mode (1): See if you can escape the maze!", width/2, height/2-45.0f, 0.35f, glm::vec3(1.0f, 1.0f, 1.0f));
+                writer->drawText(1, "Timed Mode (2): See if you can escape the maze before time runs out!", width/2, height/2-65.0f, 0.35f, glm::vec3(1.0f, 1.0f, 1.0f));
+            } else {
+                if (gameOver) {
+                    writer->drawText(1, "You Won!", width/2, height/2+85.0f, 1.0f, glm::vec3(1.0f, 1.0f, 1.0f));
+                    if (timedGame){
+                        writer->drawText(1, "Time Left: "+formatTime(), width/2, height/2+60.0f, 0.35f, glm::vec3(1.0f, 1.0f, 1.0f));
+                    } else {
+                        writer->drawText(1, "Time Taken: "+formatTime(), width/2, height/2+60.0f, 0.35f, glm::vec3(1.0f, 1.0f, 1.0f));
+                    }
+                    writer->drawText(1, "Press R to restart", width/2, height/2+10.0f, 0.45f, glm::vec3(1.0f, 1.0f, 1.0f));
+                } else {
+                    writer->drawText(1, "Axes: "+std::to_string(hasAxe), 50.0f, 10.0f, 0.5f, glm::vec3(1.0f, 1.0f, 1.0f));
+                }
+                if (timedGame) {
+                    if (lostGame) {
+                        writer->drawText(1, "You Lost :(", width/2, height/2+85.0f, 1.0f, glm::vec3(1.0f, 1.0f, 1.0f));
+                        writer->drawText(1, "You didn't finish the maze before the time was up.", width/2, height/2+60.0f, 0.35f, glm::vec3(1.0f, 1.0f, 1.0f));
+                        writer->drawText(1, "Press R to restart", width/2, height/2+10.0f, 0.45f, glm::vec3(1.0f, 1.0f, 1.0f));
+                    } else {
+                        writer->drawText(1, formatTime(), 600.0f, 10.0f, 0.5f, glm::vec3(1.0f, 1.0f, 1.0f));
+                    }
+                }
+            }
+        glyphProg->unbind();
+
+        if(isChopping) {
+            partProg->bind();
+                texture->bind(partProg->getUniform("alphaTexture"));
+                CHECKED_GL_CALL(glUniformMatrix4fv(partProg->getUniform("P"), 1, GL_FALSE, value_ptr(Projection->topMatrix())));
+                SetView(partProg);
+                glUniformMatrix4fv(partProg->getUniform("M"), 1, GL_FALSE, value_ptr(Model->topMatrix()));
+                
+                thePartSystem->drawMe(partProg);
+                thePartSystem->update();
+
+            partProg->unbind();
+        }
+
+        glDisable(GL_BLEND);
 
 		// Pop matrix stacks.
 		Projection->popMatrix();
@@ -1350,6 +1578,8 @@ int main(int argc, char *argv[])
 	windowManager->init(640, 480);
 	windowManager->setEventCallbacks(application);
 	application->windowManager = windowManager;
+
+    //ISoundEngine* engine = createIrrKlangDevice();
 
 	// This is the code that will likely change program to program as you
 	// may need to initialize or set up different data and state
@@ -1385,6 +1615,7 @@ int main(int argc, char *argv[])
 		// Poll for and process events.
 		glfwPollEvents();
 	}
+    //engine->drop();
 
 	// Quit program.
 	windowManager->shutdown();

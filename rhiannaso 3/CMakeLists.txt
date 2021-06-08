@@ -26,6 +26,11 @@ add_executable(${CMAKE_PROJECT_NAME} ${SOURCES} ${HEADERS} ${GLSL})
 findGLFW3(${CMAKE_PROJECT_NAME})
 findGLM(${CMAKE_PROJECT_NAME})
 
+# Add Freetype 2 from local source (for best results on Mac)
+add_subdirectory("ext/freetype-2.10.4")
+target_link_libraries(${CMAKE_PROJECT_NAME} freetype)
+include_directories("ext/freetype-2.10.4/include")
+
 # OS specific options and libraries
 if(NOT WIN32)
 
